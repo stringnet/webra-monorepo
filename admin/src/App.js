@@ -132,7 +132,7 @@ const ProjectsView = () => {
                 const token = localStorage.getItem('webar_token');
                 if (!token) {
                     console.error("ProjectsView: No se encontró token en localStorage.");
-                    throw new Error("No se encontró token de autenticación.");
+                    throw new Error("No se encontró token de autenticación. Por favor, inicie sesión de nuevo.");
                 }
                 console.log("ProjectsView: Token encontrado. Llamando a la API...");
                 const data = await apiService.getProjects(token);
@@ -292,16 +292,20 @@ const DashboardPage = ({ user, onLogout }) => {
 
 export default function App() {
     const [user, setUser] = useState(null);
+    const [authReady, setAuthReady] = useState(false);
 
     useEffect(() => {
         const token = localStorage.getItem('webar_token');
         if (token) {
             const decodedPayload = decodeJwt(token);
             if (decodedPayload && decodedPayload.user) {
+                // Para el perfil, necesitamos el email, que no está en el token actualmente.
+                // Lo añadimos manualmente por ahora.
                 const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
                 setUser(userWithEmail);
             }
         }
+        setAuthReady(true); // Marcamos la autenticación como lista
     }, []);
 
     const handleLogin = (token) => {
@@ -317,6 +321,11 @@ export default function App() {
         localStorage.removeItem('webar_token');
         setUser(null);
     };
+
+    // No renderizar nada hasta que el chequeo inicial de autenticación haya terminado
+    if (!authReady) {
+        return <div className="flex h-screen w-full items-center justify-center"><LoaderCircle className="animate-spin text-blue-500" size={40} /></div>;
+    }
 
     if (!user) {
         return <LoginPage onLogin={handleLogin} />;
