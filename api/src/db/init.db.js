@@ -1,44 +1,52 @@
 import pool from './db.js';
+import bcrypt from 'bcryptjs';
 
 const initializeDatabase = async () => {
-    const createTablesScript = `
-        CREATE TABLE IF NOT EXISTS roles (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(50) UNIQUE NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS users (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            name VARCHAR(100) NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password_hash VARCHAR(255) NOT NULL,
-            role_id INT,
-            project_limit INT DEFAULT 5,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            CONSTRAINT fk_role FOREIGN KEY(role_id) REFERENCES roles(id)
-        );
-    `;
-
-    const insertInitialDataScript = `
-        INSERT INTO roles (name) VALUES ('admin'), ('standard') ON CONFLICT (name) DO NOTHING;
-        INSERT INTO users (name, email, password_hash, role_id)
-        SELECT 'Roberto Stringnet', 'roberto@stringnet.pe', '$2a$12$K.F3fL2dG9p.J8s.eP7gAOlxYg8f7/ZcR6E5.P3nB5tG8iWqS7qUa', (SELECT id FROM roles WHERE name = 'admin')
-        WHERE NOT EXISTS (
-            SELECT 1 FROM users WHERE email = 'roberto@stringnet.pe'
-        );
-    `;
-
-    // La función 'async' propagará automáticamente cualquier error
-    // como una promesa rechazada, que podemos capturar en index.js.
     const client = await pool.connect();
     try {
-        console.log('Ejecutando script de creación de tablas...');
+        console.log('Verificando la estructura de la base de datos...');
+
+        // Crear tablas si no existen
+        const createTablesScript = `
+            CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, name VARCHAR(50) UNIQUE NOT NULL);
+            CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name VARCHAR(100) NOT NULL, email VARCHAR(255) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, role_id INT, project_limit INT DEFAULT 5, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), CONSTRAINT fk_role FOREIGN KEY(role_id) REFERENCES roles(id));
+        `;
         await client.query(createTablesScript);
-        console.log('Ejecutando script de inserción de datos...');
-        await client.query(insertInitialDataScript);
+
+        // Insertar roles si no existen
+        await client.query("INSERT INTO roles (name) VALUES ('admin'), ('standard') ON CONFLICT (name) DO NOTHING;");
+        console.log('Tablas y roles verificados.');
+
+        // Verificar si el usuario administrador ya existe
+        const adminEmail = 'roberto@stringnet.pe';
+        const userCheck = await client.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
+
+        if (userCheck.rows.length === 0) {
+            // El usuario no existe, así que lo creamos
+            console.log(`Usuario administrador '${adminEmail}' no encontrado. Creándolo ahora...`);
+            const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD;
+
+            if (!adminPassword) {
+                throw new Error('La variable de entorno ADMIN_DEFAULT_PASSWORD no está definida.');
+            }
+
+            // Hashear la contraseña
+            console.log('Hasheando la contraseña por defecto...');
+            const salt = await bcrypt.genSalt(12);
+            const passwordHash = await bcrypt.hash(adminPassword, salt);
+            console.log('Contraseña hasheada. Insertando usuario en la base de datos...');
+
+            // Insertar el nuevo usuario administrador
+            const insertAdminScript = `
+                INSERT INTO users (name, email, password_hash, role_id)
+                VALUES ($1, $2, $3, (SELECT id FROM roles WHERE name = 'admin'))
+            `;
+            await client.query(insertAdminScript, ['Roberto Stringnet', adminEmail, passwordHash]);
+            console.log(`Usuario administrador '${adminEmail}' creado exitosamente.`);
+        } else {
+            console.log(`El usuario administrador '${adminEmail}' ya existe. No se requieren acciones.`);
+        }
     } finally {
-        // Aseguramos que el cliente siempre se libere.
         client.release();
     }
 };
