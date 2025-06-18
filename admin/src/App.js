@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, Trash2, Edit, Sparkles, Wand2, PartyPopper, Target, LoaderCircle } from 'lucide-react';
+import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, Trash2, Edit, Sparkles, Wand2, PartyPopper, Target, LoaderCircle, PlusCircle } from 'lucide-react';
 
 // --- API Configuration ---
 const API_URL = 'https://apiwebra.scanmee.io';
@@ -27,6 +27,21 @@ const apiService = {
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Error al obtener los proyectos.');
+        }
+        return response.json();
+    },
+    createProject: async (token, projectData) => {
+        const response = await fetch(`${API_URL}/api/projects`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(projectData)
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Error al crear el proyecto.');
         }
         return response.json();
     }
@@ -103,72 +118,137 @@ const MarketingIdeasModal = ({ project, onClose }) => {
     // Código del modal de Gemini sin cambios
 };
 
-// --- VISTAS PRINCIPALES ---
+// Componente Modal para crear un nuevo proyecto
+const CreateProjectModal = ({ onClose, onProjectCreated }) => {
+    const [name, setName] = useState('');
+    const [modelUrl, setModelUrl] = useState('');
+    const [markerUrl, setMarkerUrl] = useState('');
+    const [markerType, setMarkerType] = useState('image');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-const DashboardView = ({ user }) => {
-    console.log("-> DashboardView rendering");
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+
+        const projectData = {
+            name: name,
+            model_url: modelUrl,
+            marker_type: markerType,
+            marker_url: markerUrl,
+        };
+        
+        try {
+            const token = localStorage.getItem('webar_token');
+            if (!token) throw new Error("No hay token de autenticación.");
+            
+            const newProject = await apiService.createProject(token, projectData);
+            onProjectCreated(newProject);
+            onClose();
+
+        } catch (err) {
+            setError(err.message || "Ocurrió un error desconocido.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
-            <p className="text-gray-500 mt-1">Aquí tienes un resumen de la actividad de la plataforma.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"><StatCard title="Total de Proyectos" value="3" icon={<FolderKanban className="text-blue-500" />} change="+5" changeType="increase" /><StatCard title="Total de Usuarios" value="12" icon={<Users className="text-blue-500" />} change="+2" changeType="increase" /><StatCard title="Visualizaciones" value="1,287" icon={<Share2 className="text-blue-500" />} change="-10%" changeType="decrease" /></div>
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform transition-all">
+                <div className="p-6 border-b border-gray-200">
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="text-blue-500 mr-2" />Crear Nuevo Proyecto</h2>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nombre del Proyecto</label>
+                            <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
+                        </div>
+                        <div>
+                            <label htmlFor="model_url" className="block text-sm font-medium text-gray-700">URL del Modelo 3D (.glb, .gltf)</label>
+                            <input type="url" id="model_url" value={modelUrl} onChange={(e) => setModelUrl(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="https://..." required />
+                        </div>
+                        <div>
+                            <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
+                             <select id="marker_type" value={markerType} onChange={(e) => setMarkerType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                <option value="image">Imagen</option>
+                                <option value="qr">Código QR</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label htmlFor="marker_url" className="block text-sm font-medium text-gray-700">URL del Marcador (Imagen)</label>
+                            <input type="url" id="marker_url" value={markerUrl} onChange={(e) => setMarkerUrl(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="https://..." required />
+                        </div>
+                        {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-md">{error}</p>}
+                    </div>
+                    <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">Cancelar</button>
+                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none" disabled={loading}>
+                            {loading ? <LoaderCircle className="animate-spin" /> : 'Crear Proyecto'}
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 };
 
+
+// --- VISTAS PRINCIPALES ---
+
+const DashboardView = ({ user }) => (
+    <div>
+        <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
+        <p className="text-gray-500 mt-1">Aquí tienes un resumen de la actividad de la plataforma.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"><StatCard title="Total de Proyectos" value="3" icon={<FolderKanban className="text-blue-500" />} change="+5" changeType="increase" /><StatCard title="Total de Usuarios" value="12" icon={<Users className="text-blue-500" />} change="+2" changeType="increase" /><StatCard title="Visualizaciones" value="1,287" icon={<Share2 className="text-blue-500" />} change="-10%" changeType="decrease" /></div>
+    </div>
+);
+
 const ProjectsView = () => {
-    console.log("-> ProjectsView rendering");
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedProject, setSelectedProject] = useState(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+    const fetchProjects = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('webar_token');
+            if (!token) throw new Error("No se encontró token de autenticación.");
+            const data = await apiService.getProjects(token);
+            setProjects(data);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchProjects = async () => {
-            console.log("ProjectsView USE_EFFECT: Iniciando la obtención de proyectos...");
-            try {
-                const token = localStorage.getItem('webar_token');
-                if (!token) {
-                    console.error("ProjectsView USE_EFFECT: No se encontró token en localStorage.");
-                    throw new Error("No se encontró token de autenticación. Por favor, inicie sesión de nuevo.");
-                }
-                console.log("ProjectsView USE_EFFECT: Token encontrado. Llamando a la API...");
-                const data = await apiService.getProjects(token);
-                console.log("ProjectsView USE_EFFECT: Datos recibidos de la API:", data);
-                setProjects(data);
-            } catch (err) {
-                console.error("ProjectsView USE_EFFECT: Error al obtener proyectos:", err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
-                console.log("ProjectsView USE_EFFECT: Carga finalizada.");
-            }
-        };
-
         fetchProjects();
     }, []);
 
-    const handleDelete = (id) => { if (window.confirm('¿Estás seguro?')) { /* ... */ } };
-    const handleOpenAIAssistant = (project) => { setSelectedProject(project); setIsModalOpen(true); };
+    const handleProjectCreated = (newProject) => {
+        setProjects(prevProjects => [newProject, ...prevProjects]);
+    };
 
     return (
         <div>
-            {isModalOpen && selectedProject && <MarketingIdeasModal project={selectedProject} onClose={() => setIsModalOpen(false)} />}
+            {isCreateModalOpen && <CreateProjectModal onClose={() => setIsCreateModalOpen(false)} onProjectCreated={handleProjectCreated} />}
             <div className="flex justify-between items-center">
                 <div><h1 className="text-3xl font-bold text-gray-800">Proyectos de Realidad Aumentada</h1><p className="text-gray-500 mt-1">Crea, gestiona y comparte tus experiencias de RA.</p></div>
-                <button className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors">Crear Nuevo Proyecto</button>
+                <button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors flex items-center">
+                    <PlusCircle className="mr-2" size={20} />
+                    Crear Nuevo Proyecto
+                </button>
             </div>
             <div className="mt-8 bg-white rounded-xl shadow-md overflow-x-auto">
                 {loading ? (
-                    <div className="flex justify-center items-center p-10">
-                        <LoaderCircle className="animate-spin text-blue-500" size={40} />
-                        <span className="ml-4 text-gray-600">Cargando proyectos...</span>
-                    </div>
+                    <div className="flex justify-center items-center p-10"><LoaderCircle className="animate-spin text-blue-500" size={40} /><span className="ml-4 text-gray-600">Cargando proyectos...</span></div>
                 ) : error ? (
-                    <div className="text-center p-10 text-red-500 bg-red-50">
-                        <strong>Error:</strong> {error}
-                    </div>
+                    <div className="text-center p-10 text-red-500 bg-red-50"><strong>Error:</strong> {error}</div>
                 ) : (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -182,10 +262,10 @@ const ProjectsView = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500 hover:underline"><a href={project.view_url} target="_blank" rel="noopener noreferrer">{project.view_url}</a></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
                                         <div className="flex items-center justify-center space-x-1">
-                                            <button onClick={() => handleOpenAIAssistant(project)} className="text-gray-400 hover:text-yellow-500 p-2 rounded-full transition-colors" title="Asistente de Marketing IA"><Sparkles size={18} /></button>
+                                            <button className="text-gray-400 hover:text-yellow-500 p-2 rounded-full transition-colors" title="Asistente de Marketing IA"><Sparkles size={18} /></button>
                                             <button className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors" title="Ver Código QR"><QrCode size={18} /></button>
                                             <button className="text-gray-400 hover:text-green-600 p-2 rounded-full transition-colors" title="Editar"><Edit size={18} /></button>
-                                            <button onClick={() => handleDelete(project.id)} className="text-gray-400 hover:text-red-600 p-2 rounded-full transition-colors" title="Eliminar"><Trash2 size={18} /></button>
+                                            <button className="text-gray-400 hover:text-red-600 p-2 rounded-full transition-colors" title="Eliminar"><Trash2 size={18} /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -202,12 +282,9 @@ const ProjectsView = () => {
     );
 };
 
-const UsersView = () => {
-    console.log("-> UsersView rendering");
-    return (
-        <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p><div className="mt-8 bg-white rounded-xl shadow-md p-10 text-center"><p className="text-gray-600">La funcionalidad de gestión de usuarios se implementará aquí.</p></div></div>
-    );
-};
+const UsersView = () => (
+    <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p><div className="mt-8 bg-white rounded-xl shadow-md p-10 text-center"><p className="text-gray-600">La funcionalidad de gestión de usuarios se implementará aquí.</p></div></div>
+);
 
 
 const LoginPage = ({ onLogin }) => {
@@ -264,7 +341,6 @@ const LoginPage = ({ onLogin }) => {
 const DashboardPage = ({ user, onLogout }) => {
     const [activeView, setActiveView] = useState('dashboard');
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    console.log("-> DashboardPage rendering. Active view is:", activeView);
     
     const renderView = () => {
         switch (activeView) {
@@ -275,7 +351,6 @@ const DashboardPage = ({ user, onLogout }) => {
         }
     };
     const handleNavigate = (view) => {
-        console.log(`Navigating to: ${view}`);
         setActiveView(view);
         if (window.innerWidth < 768) {
             setSidebarOpen(false);
@@ -299,55 +374,38 @@ export default function App() {
     const [authReady, setAuthReady] = useState(false);
 
     useEffect(() => {
-        console.log("App USE_EFFECT: Verificando autenticación...");
         const token = localStorage.getItem('webar_token');
         if (token) {
-            console.log("App USE_EFFECT: Token encontrado.");
             const decodedPayload = decodeJwt(token);
             if (decodedPayload && decodedPayload.user) {
                 const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
                 setUser(userWithEmail);
-                console.log("App USE_EFFECT: Usuario establecido desde el token.", userWithEmail);
-            } else {
-                console.error("App USE_EFFECT: El token es inválido o no contiene datos de usuario.");
-                localStorage.removeItem('webar_token');
             }
-        } else {
-            console.log("App USE_EFFECT: No se encontró token.");
         }
         setAuthReady(true);
-        console.log("App USE_EFFECT: Chequeo de autenticación finalizado.");
     }, []);
 
     const handleLogin = (token) => {
-        console.log("HANDLE_LOGIN: Iniciando sesión con nuevo token.");
         localStorage.setItem('webar_token', token);
         const decodedPayload = decodeJwt(token);
         if (decodedPayload && decodedPayload.user) {
              const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
              setUser(userWithEmail);
-             console.log("HANDLE_LOGIN: Usuario establecido.", userWithEmail);
         }
     };
 
     const handleLogout = () => {
-        console.log("HANDLE_LOGOUT: Cerrando sesión.");
         localStorage.removeItem('webar_token');
         setUser(null);
     };
-    
-    console.log("-> App rendering. AuthReady:", authReady, "User:", user ? user.name : null);
 
     if (!authReady) {
-        console.log("-> App rendering: Auth no está lista, mostrando Loader.");
         return <div className="flex h-screen w-full items-center justify-center"><LoaderCircle className="animate-spin text-blue-500" size={40} /></div>;
     }
 
     if (!user) {
-        console.log("-> App rendering: Usuario no autenticado, mostrando LoginPage.");
         return <LoginPage onLogin={handleLogin} />;
     }
-    
-    console.log("-> App rendering: Usuario autenticado, mostrando DashboardPage.");
+
     return <DashboardPage user={user} onLogout={handleLogout} />;
 }
