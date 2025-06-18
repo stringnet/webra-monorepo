@@ -287,14 +287,18 @@ const DashboardPage = ({ user, onLogout }) => {
 export default function App() {
     const [user, setUser] = useState(null);
 
+    // Efecto para comprobar si hay un token en el almacenamiento al cargar la app
     useEffect(() => {
         const token = localStorage.getItem('webar_token');
         if (token) {
             const decodedPayload = decodeJwt(token);
+            // El payload del token se encuentra dentro de la propiedad 'user'
             if (decodedPayload && decodedPayload.user) {
-                // Agregar el email del usuario para mostrarlo en el perfil
-                const userWithEmail = { ...decodedPayload.user, email: decodedPayload.user.id }; // Asumiendo que el ID es el email, si no, habría que cambiar el payload del token en el backend
-                setUser(decodedPayload.user);
+                // Para el perfil, necesitamos el email, que no está en el token.
+                // Lo añadimos manualmente por ahora. En una app real, podrías hacer
+                // una llamada a /api/me para obtener los datos completos del usuario.
+                const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
+                setUser(userWithEmail);
             }
         }
     }, []);
@@ -303,7 +307,8 @@ export default function App() {
         localStorage.setItem('webar_token', token);
         const decodedPayload = decodeJwt(token);
         if (decodedPayload && decodedPayload.user) {
-            setUser(decodedPayload.user);
+             const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
+             setUser(userWithEmail);
         }
     };
 
