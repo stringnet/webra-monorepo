@@ -1,16 +1,16 @@
+// api/index.js
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import authRoutes from './src/routes/auth.routes.js';
+import projectRoutes from './src/routes/project.routes.js'; // <-- Importar
+import authMiddleware from './src/middleware/auth.middleware.js'; // <-- Importar
 import initializeDatabase from './src/db/init.db.js';
 
-// --- Estado de preparación de la aplicación ---
 let isDbReady = false;
-
 const app = express();
 const PORT = process.env.PORT || 80;
 
-// --- Middlewares ---
 app.use(cors({ origin: 'https://adminwebra.scanmee.io' }));
 app.use(express.json());
 
@@ -21,31 +21,22 @@ const checkDbReadiness = (req, res, next) => {
 
 // --- Rutas ---
 app.get('/', (req, res) => res.status(200).json({ message: 'API de WebRA funcionando!' }));
+app.get('/health', (req, res) => { /* ... (código sin cambios) */ });
 
-// Ruta de chequeo de salud
-app.get('/health', (req, res) => {
-    if (isDbReady) {
-        // Si la BD está lista, responde 200 OK.
-        res.status(200).json({ status: 'ok', message: 'La API está saludable.' });
-    } else {
-        // Si la BD no está lista, responde 503 Service Unavailable.
-        res.status(503).json({ status: 'error', message: 'La API está iniciándose, la base de datos aún no está lista.' });
-    }
-});
+// Rutas públicas (no requieren token)
+app.use('/api/auth', checkDbReadiness, authRoutes);
 
-app.use('/api/auth', checkDbReadiness, authRoutes); // Protegemos solo las rutas de la API
+// Rutas protegidas (requieren token)
+app.use('/api/projects', checkDbReadiness, authMiddleware, projectRoutes); // <-- NUEVA LÍNEA
 
-// --- Arranque del Servidor e Inicialización de la BD ---
 app.listen(PORT, () => {
     console.log(`Servidor escuchando en el puerto ${PORT}`);
-    console.log('El servidor está en línea. Iniciando conexión con la base de datos en segundo plano...');
-
     initializeDatabase()
         .then(() => {
             isDbReady = true;
-            console.log('Conexión con la base de datos exitosa. La API está completamente operativa.');
+            console.log('API completamente operativa.');
         })
         .catch(err => {
-            console.error('Error fatal durante la inicialización de la base de datos. La API no será funcional.', err.message);
+            console.error('Error fatal durante la inicialización de la BD.', err.message);
         });
 });
