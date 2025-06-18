@@ -127,17 +127,23 @@ const ProjectsView = () => {
 
     useEffect(() => {
         const fetchProjects = async () => {
+            console.log("ProjectsView: Iniciando la obtención de proyectos...");
             try {
                 const token = localStorage.getItem('webar_token');
                 if (!token) {
+                    console.error("ProjectsView: No se encontró token en localStorage.");
                     throw new Error("No se encontró token de autenticación.");
                 }
+                console.log("ProjectsView: Token encontrado. Llamando a la API...");
                 const data = await apiService.getProjects(token);
+                console.log("ProjectsView: Datos recibidos de la API:", data);
                 setProjects(data);
             } catch (err) {
+                console.error("ProjectsView: Error al obtener proyectos:", err);
                 setError(err.message);
             } finally {
                 setLoading(false);
+                console.log("ProjectsView: Carga finalizada.");
             }
         };
 
@@ -287,16 +293,11 @@ const DashboardPage = ({ user, onLogout }) => {
 export default function App() {
     const [user, setUser] = useState(null);
 
-    // Efecto para comprobar si hay un token en el almacenamiento al cargar la app
     useEffect(() => {
         const token = localStorage.getItem('webar_token');
         if (token) {
             const decodedPayload = decodeJwt(token);
-            // El payload del token se encuentra dentro de la propiedad 'user'
             if (decodedPayload && decodedPayload.user) {
-                // Para el perfil, necesitamos el email, que no está en el token.
-                // Lo añadimos manualmente por ahora. En una app real, podrías hacer
-                // una llamada a /api/me para obtener los datos completos del usuario.
                 const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
                 setUser(userWithEmail);
             }
