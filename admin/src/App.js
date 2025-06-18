@@ -5,7 +5,6 @@ import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, 
 const API_URL = 'https://apiwebra.scanmee.io';
 
 // --- Helper Function ---
-// Decodifica un token JWT de forma simple para obtener el payload.
 const decodeJwt = (token) => {
     try {
         return JSON.parse(atob(token.split('.')[1]));
@@ -16,7 +15,6 @@ const decodeJwt = (token) => {
 };
 
 // --- API Service ---
-// Un objeto para manejar las llamadas a la API de forma centralizada.
 const apiService = {
     getProjects: async (token) => {
         const response = await fetch(`${API_URL}/api/projects`, {
@@ -32,7 +30,6 @@ const apiService = {
         }
         return response.json();
     }
-    // Aquí añadiremos createProject, deleteProject, etc. en el futuro
 };
 
 
@@ -103,54 +100,56 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
 );
 
 const MarketingIdeasModal = ({ project, onClose }) => {
-    // ... (Código del modal de Gemini sin cambios)
+    // Código del modal de Gemini sin cambios
 };
 
 // --- VISTAS PRINCIPALES ---
 
-const DashboardView = ({ user }) => (
-    // ... (Código del Dashboard sin cambios)
-    <div>
-        <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
-        <p className="text-gray-500 mt-1">Aquí tienes un resumen de la actividad de la plataforma.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"><StatCard title="Total de Proyectos" value="3" icon={<FolderKanban className="text-blue-500" />} change="+5" changeType="increase" /><StatCard title="Total de Usuarios" value="12" icon={<Users className="text-blue-500" />} change="+2" changeType="increase" /><StatCard title="Visualizaciones" value="1,287" icon={<Share2 className="text-blue-500" />} change="-10%" changeType="decrease" /></div>
-    </div>
-);
+const DashboardView = ({ user }) => {
+    console.log("-> DashboardView rendering");
+    return (
+        <div>
+            <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
+            <p className="text-gray-500 mt-1">Aquí tienes un resumen de la actividad de la plataforma.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"><StatCard title="Total de Proyectos" value="3" icon={<FolderKanban className="text-blue-500" />} change="+5" changeType="increase" /><StatCard title="Total de Usuarios" value="12" icon={<Users className="text-blue-500" />} change="+2" changeType="increase" /><StatCard title="Visualizaciones" value="1,287" icon={<Share2 className="text-blue-500" />} change="-10%" changeType="decrease" /></div>
+        </div>
+    );
+};
 
 const ProjectsView = () => {
+    console.log("-> ProjectsView rendering");
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
 
     useEffect(() => {
         const fetchProjects = async () => {
-            console.log("ProjectsView: Iniciando la obtención de proyectos...");
+            console.log("ProjectsView USE_EFFECT: Iniciando la obtención de proyectos...");
             try {
                 const token = localStorage.getItem('webar_token');
                 if (!token) {
-                    console.error("ProjectsView: No se encontró token en localStorage.");
+                    console.error("ProjectsView USE_EFFECT: No se encontró token en localStorage.");
                     throw new Error("No se encontró token de autenticación. Por favor, inicie sesión de nuevo.");
                 }
-                console.log("ProjectsView: Token encontrado. Llamando a la API...");
+                console.log("ProjectsView USE_EFFECT: Token encontrado. Llamando a la API...");
                 const data = await apiService.getProjects(token);
-                console.log("ProjectsView: Datos recibidos de la API:", data);
+                console.log("ProjectsView USE_EFFECT: Datos recibidos de la API:", data);
                 setProjects(data);
             } catch (err) {
-                console.error("ProjectsView: Error al obtener proyectos:", err);
+                console.error("ProjectsView USE_EFFECT: Error al obtener proyectos:", err);
                 setError(err.message);
             } finally {
                 setLoading(false);
-                console.log("ProjectsView: Carga finalizada.");
+                console.log("ProjectsView USE_EFFECT: Carga finalizada.");
             }
         };
 
         fetchProjects();
-    }, []); // El array vacío asegura que esto se ejecute solo una vez al montar el componente
+    }, []);
 
-    const handleDelete = (id) => { if (window.confirm('¿Estás seguro de que quieres eliminar este proyecto?')) { /* Lógica de eliminar aquí */ } };
+    const handleDelete = (id) => { if (window.confirm('¿Estás seguro?')) { /* ... */ } };
     const handleOpenAIAssistant = (project) => { setSelectedProject(project); setIsModalOpen(true); };
 
     return (
@@ -173,12 +172,7 @@ const ProjectsView = () => {
                 ) : (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Vista</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                            </tr>
+                            <tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Vista</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {projects.length > 0 ? projects.map(project => (
@@ -208,9 +202,12 @@ const ProjectsView = () => {
     );
 };
 
-const UsersView = () => (
-    <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p><div className="mt-8 bg-white rounded-xl shadow-md p-10 text-center"><p className="text-gray-600">La funcionalidad de gestión de usuarios se implementará aquí.</p></div></div>
-);
+const UsersView = () => {
+    console.log("-> UsersView rendering");
+    return (
+        <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p><div className="mt-8 bg-white rounded-xl shadow-md p-10 text-center"><p className="text-gray-600">La funcionalidad de gestión de usuarios se implementará aquí.</p></div></div>
+    );
+};
 
 
 const LoginPage = ({ onLogin }) => {
@@ -267,6 +264,7 @@ const LoginPage = ({ onLogin }) => {
 const DashboardPage = ({ user, onLogout }) => {
     const [activeView, setActiveView] = useState('dashboard');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    console.log("-> DashboardPage rendering. Active view is:", activeView);
     
     const renderView = () => {
         switch (activeView) {
@@ -276,7 +274,13 @@ const DashboardPage = ({ user, onLogout }) => {
             default: return <DashboardView user={user} />;
         }
     };
-    const handleNavigate = (view) => { setActiveView(view); if (window.innerWidth < 768) { setSidebarOpen(false); } };
+    const handleNavigate = (view) => {
+        console.log(`Navigating to: ${view}`);
+        setActiveView(view);
+        if (window.innerWidth < 768) {
+            setSidebarOpen(false);
+        }
+    };
 
     return (
         <div className="flex h-screen bg-gray-100">
@@ -295,41 +299,55 @@ export default function App() {
     const [authReady, setAuthReady] = useState(false);
 
     useEffect(() => {
+        console.log("App USE_EFFECT: Verificando autenticación...");
         const token = localStorage.getItem('webar_token');
         if (token) {
+            console.log("App USE_EFFECT: Token encontrado.");
             const decodedPayload = decodeJwt(token);
             if (decodedPayload && decodedPayload.user) {
-                // Para el perfil, necesitamos el email, que no está en el token actualmente.
-                // Lo añadimos manualmente por ahora.
                 const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
                 setUser(userWithEmail);
+                console.log("App USE_EFFECT: Usuario establecido desde el token.", userWithEmail);
+            } else {
+                console.error("App USE_EFFECT: El token es inválido o no contiene datos de usuario.");
+                localStorage.removeItem('webar_token');
             }
+        } else {
+            console.log("App USE_EFFECT: No se encontró token.");
         }
-        setAuthReady(true); // Marcamos la autenticación como lista
+        setAuthReady(true);
+        console.log("App USE_EFFECT: Chequeo de autenticación finalizado.");
     }, []);
 
     const handleLogin = (token) => {
+        console.log("HANDLE_LOGIN: Iniciando sesión con nuevo token.");
         localStorage.setItem('webar_token', token);
         const decodedPayload = decodeJwt(token);
         if (decodedPayload && decodedPayload.user) {
              const userWithEmail = { ...decodedPayload.user, email: 'roberto@stringnet.pe' };
              setUser(userWithEmail);
+             console.log("HANDLE_LOGIN: Usuario establecido.", userWithEmail);
         }
     };
 
     const handleLogout = () => {
+        console.log("HANDLE_LOGOUT: Cerrando sesión.");
         localStorage.removeItem('webar_token');
         setUser(null);
     };
+    
+    console.log("-> App rendering. AuthReady:", authReady, "User:", user ? user.name : null);
 
-    // No renderizar nada hasta que el chequeo inicial de autenticación haya terminado
     if (!authReady) {
+        console.log("-> App rendering: Auth no está lista, mostrando Loader.");
         return <div className="flex h-screen w-full items-center justify-center"><LoaderCircle className="animate-spin text-blue-500" size={40} /></div>;
     }
 
     if (!user) {
+        console.log("-> App rendering: Usuario no autenticado, mostrando LoginPage.");
         return <LoginPage onLogin={handleLogin} />;
     }
-
+    
+    console.log("-> App rendering: Usuario autenticado, mostrando DashboardPage.");
     return <DashboardPage user={user} onLogout={handleLogout} />;
 }
