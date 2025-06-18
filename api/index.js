@@ -3,8 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import authRoutes from './src/routes/auth.routes.js';
-import projectRoutes from './src/routes/project.routes.js'; // <-- Importar
-import authMiddleware from './src/middleware/auth.middleware.js'; // <-- Importar
+import projectRoutes from './src/routes/project.routes.js';
+import uploadRoutes from './src/routes/upload.routes.js'; // <-- Importar new
+import authMiddleware from './src/middleware/auth.middleware.js';
 import initializeDatabase from './src/db/init.db.js';
 
 let isDbReady = false;
@@ -27,7 +28,8 @@ app.get('/health', (req, res) => { /* ... (código sin cambios) */ });
 app.use('/api/auth', checkDbReadiness, authRoutes);
 
 // Rutas protegidas (requieren token)
-app.use('/api/projects', checkDbReadiness, authMiddleware, projectRoutes); // <-- NUEVA LÍNEA
+app.use('/api/projects', checkDbReadiness, authMiddleware, projectRoutes); 
+app.use('/api/upload', checkDbReadiness, authMiddleware, uploadRoutes); // <-- NUEVA LÍNEA
 
 app.listen(PORT, () => {
     console.log(`Servidor escuchando en el puerto ${PORT}`);
