@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, Trash2, Edit, Sparkles, Wand2, PartyPopper, Target, LoaderCircle, PlusCircle, UploadCloud, FileCheck2 } from 'lucide-react';
 
+// =================================================================================
+// ¡ACCIÓN REQUERIDA! REEMPLAZA ESTOS VALORES
+// =================================================================================
+// Pega aquí el "Cloud Name" y la "API Key" de tu cuenta de Cloudinary.
+// Los puedes encontrar en el dashboard principal de tu cuenta de Cloudinary.
+const CLOUDINARY_CLOUD_NAME = 'tu-cloud-name-aqui'; 
+const CLOUDINARY_API_KEY = 'tu-api-key-de-cloudinary'; 
+// =================================================================================
+
 // --- API Configuration ---
 const API_URL = 'https://apiwebra.scanmee.io';
-// DEBES REEMPLAZAR ESTO con el "Cloud Name" de tu cuenta de Cloudinary
-const CLOUDINARY_CLOUD_NAME = 'tu-cloud-name-aqui'; 
-// DEBES REEMPLAZAR ESTO con tu API Key de Cloudinary
-const CLOUDINARY_API_KEY = 'tu-api-key-de-cloudinary'; 
 
 
 // --- Helper Function ---
@@ -40,7 +45,10 @@ const apiService = {
             body: formData,
         });
 
-        if (!response.ok) throw new Error('La subida a Cloudinary falló.');
+        if (!response.ok) {
+            console.error("Cloudinary upload failed response:", await response.text());
+            throw new Error('La subida a Cloudinary falló.');
+        }
         return response.json();
     },
     getProjects: async (token) => {
@@ -131,8 +139,11 @@ const MarketingIdeasModal = ({ project, onClose }) => {
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
     const [markerType, setMarkerType] = useState('image');
-    const [modelFile, setModelFile] = useState({ url: null, status: 'idle' }); // idle, uploading, done, error
-    const [markerFile, setMarkerFile] = useState({ url: null, status: 'idle' });
+    
+    // Estados para manejar la subida de archivos
+    const [modelFile, setModelFile] = useState({ file: null, url: null, status: 'idle' }); // idle, uploading, done, error
+    const [markerFile, setMarkerFile] = useState({ file: null, url: null, status: 'idle' });
+
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -140,16 +151,16 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         if (!file) return;
 
         const updateState = fileType === 'model' ? setModelFile : setMarkerFile;
-        updateState({ url: null, status: 'uploading' });
+        updateState({ file: file, url: null, status: 'uploading' });
 
         try {
             const token = localStorage.getItem('webar_token');
             const signatureData = await apiService.getSignature(token);
             const uploadResult = await apiService.uploadToCloudinary(file, signatureData);
-            updateState({ url: uploadResult.secure_url, status: 'done' });
+            updateState({ file: file, url: uploadResult.secure_url, status: 'done' });
         } catch (err) {
             console.error(`Error al subir ${fileType}:`, err);
-            updateState({ url: null, status: 'error' });
+            updateState({ file: file, url: null, status: 'error' });
             setError(`Error al subir el archivo ${fileType}.`);
         }
     };
@@ -183,7 +194,7 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         }
     };
 
-    const FileInput = ({ label, onFileSelect, status }) => (
+    const FileInput = ({ label, onFileSelect, status, fileName }) => (
         <div>
             <label className="block text-sm font-medium text-gray-700">{label}</label>
             <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 ${status === 'error' ? 'border-red-400' : 'border-gray-300'} border-dashed rounded-md`}>
@@ -195,12 +206,12 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                     
                     <div className="flex text-sm text-gray-600">
                         <label htmlFor={label} className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                            <span>Selecciona un archivo</span>
+                            <span>{status === 'done' ? 'Cambiar archivo' : 'Selecciona un archivo'}</span>
                             <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} />
                         </label>
                     </div>
                      <p className="text-xs text-gray-500">
-                        {status === 'done' ? '¡Archivo subido!' : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}
+                        {status === 'done' ? fileName : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}
                      </p>
                 </div>
             </div>
@@ -220,14 +231,14 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                             <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
                         </div>
 
-                        <FileInput label="Modelo 3D" onFileSelect={(file) => handleFileChange(file, 'model')} status={modelFile.status} />
-                        <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} />
+                        <FileInput label="Modelo 3D" onFileSelect={(file) => handleFileChange(file, 'model')} status={modelFile.status} fileName={modelFile.file?.name} />
+                        <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} fileName={markerFile.file?.name} />
                         
                         {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-md">{error}</p>}
                     </div>
                     <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
                         <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</button>
-                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700" disabled={loading || modelFile.status !== 'done' || markerFile.status !== 'done'}>
+                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400" disabled={loading || modelFile.status !== 'done' || markerFile.status !== 'done'}>
                             {loading ? <LoaderCircle className="animate-spin" /> : 'Crear Proyecto'}
                         </button>
                     </div>
