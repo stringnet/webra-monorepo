@@ -10,25 +10,14 @@
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; }
         .loader-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            flex-direction: column;
-            color: #333;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.9); display: flex;
+            justify-content: center; align-items: center; z-index: 10000;
+            flex-direction: column; color: #333;
         }
         .spinner {
-            border: 8px solid #f3f3f3;
-            border-top: 8px solid #3498db;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
+            border: 8px solid #f3f3f3; border-top: 8px solid #3498db;
+            border-radius: 50%; width: 60px; height: 60px;
             animation: spin 1s linear infinite;
         }
         @keyframes spin {
@@ -36,44 +25,47 @@
             100% { transform: rotate(360deg); }
         }
         #error-message {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #ff4d4d;
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 10001;
-            display: none; /* Oculto por defecto */
-            text-align: center;
-            max-width: 90%;
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%); background-color: #ff4d4d;
+            color: white; padding: 15px; border-radius: 8px;
+            z-index: 10001; display: none; text-align: center; max-width: 90%;
         }
     </style>
 </head>
 <body>
-    <!-- Contenedor para mensajes de carga -->
     <div id="loader" class="loader-container">
         <div class="spinner"></div>
         <p id="loader-text" style="margin-top: 20px;">Cargando experiencia de RA...</p>
     </div>
-
-    <!-- Contenedor para mensajes de error -->
     <div id="error-message"></div>
 
-    <!-- Escena de A-Frame (se construirá dinámicamente) -->
-    <a-scene id="ar-scene-container" embedded arjs='sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3;'>
-        <!-- La cámara es necesaria para la vista -->
+    <!-- Escena de A-Frame. -->
+    <a-scene id="ar-scene-container" vr-mode-ui="enabled: false" embedded arjs='sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;'>
+        
+        <!-- Marcador estático con un preset por defecto para evitar errores al inicio. -->
+        <a-marker id="dynamic-marker" preset='hiro'>
+            <!-- Entidad del modelo estática. -->
+            <a-entity
+                id="dynamic-model"
+                gltf-model=""
+                scale="0.05 0.05 0.05"
+                position="0 0 0"
+                crossorigin="anonymous"
+            ></a-entity>
+        </a-marker>
+        
         <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const loader = document.getElementById('loader');
-            const loaderText = document.getElementById('loader-text');
             const errorMessage = document.getElementById('error-message');
-            const sceneContainer = document.getElementById('ar-scene-container');
+            
+            // Seleccionamos los elementos que ya existen en la escena
+            const marker = document.getElementById('dynamic-marker');
+            const model = document.getElementById('dynamic-model');
 
             const showError = (message) => {
                 errorMessage.textContent = message;
@@ -81,74 +73,63 @@
                 loader.style.display = 'none';
             };
 
-            try {
-                // 1. Obtener el ID del proyecto de la URL
-                const pathParts = window.location.pathname.split('/');
-                const projectId = pathParts.pop() || pathParts.pop(); // Maneja el caso de una barra al final
+            const initializeScene = async () => {
+                try {
+                    const pathParts = window.location.pathname.split('/');
+                    const projectId = pathParts.pop() || pathParts.pop();
 
-                if (!projectId || projectId.trim() === '') {
-                    throw new Error("No se encontró un ID de proyecto en la URL.");
-                }
-                loaderText.textContent = 'Obteniendo datos del proyecto...';
-
-                // 2. Llamar a nuestra API para obtener los datos del proyecto
-                const fetchUrl = `${API_BASE_URL}/api/public/projects/${projectId}`;
-                console.log(`Intentando hacer fetch a: ${fetchUrl}`);
-                
-                const response = await fetch(fetchUrl, {
-                    method: 'GET',
-                    mode: 'cors', // Se define explícitamente el modo CORS
-                    headers: {
-                        'Content-Type': 'application/json'
+                    if (!projectId) {
+                        throw new Error("ID de proyecto no encontrado en la URL.");
                     }
-                });
-                
-                console.log('Respuesta recibida del fetch:', response);
+                    console.log(`Proyecto ID encontrado: ${projectId}`);
 
-                if (!response.ok) {
-                    try {
-                         const errorData = await response.json();
-                         throw new Error(errorData.message || `Error del servidor: ${response.status}`);
-                    } catch (e) {
-                         throw new Error(`Error del servidor: ${response.status}`);
+                    const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
+                    
+                    if (!response.ok) {
+                        // Lanzar un error específico y más útil para el usuario para el caso 404
+                        if (response.status === 404) {
+                            throw new Error(`El proyecto no existe o el enlace es incorrecto. Por favor, verifique la URL generada en el panel de administración.`);
+                        }
+                        throw new Error(`No se pudo cargar el proyecto (Error de red: ${response.status})`);
                     }
-                }
-                
-                const projectData = await response.json();
-                loaderText.textContent = 'Datos cargados. Construyendo escena...';
+                    
+                    const projectData = await response.json();
 
-                // 3. Crear el marcador y el modelo 3D dinámicamente
-                const marker = document.createElement('a-marker');
-                marker.setAttribute('type', 'pattern');
-                marker.setAttribute('url', projectData.marker_url);
-                marker.setAttribute('emitevents', 'true');
+                    // Verificamos que las URLs no estén vacías
+                    if (!projectData.marker_url || !projectData.model_url) {
+                        throw new Error("Los datos del proyecto están incompletos (faltan URLs).");
+                    }
+                    
+                    console.log("Datos del proyecto cargados:", projectData);
 
-                const model = document.createElement('a-entity');
-                model.setAttribute('gltf-model', `url(${projectData.model_url})`);
-                model.setAttribute('scale', '0.05 0.05 0.05');
-                model.setAttribute('position', '0 0 0');
-                
-                // 4. Añadir el modelo dentro del marcador y el marcador a la escena
-                marker.appendChild(model);
-                sceneContainer.appendChild(marker);
+                    // Si el marcador es de tipo 'pattern', actualizamos el componente a-marker
+                    if (projectData.marker_type === 'pattern' || projectData.marker_type === 'image') {
+                        console.log("Configurando marcador de tipo 'pattern' con URL:", projectData.marker_url);
+                        marker.setAttribute('type', 'pattern');
+                        marker.setAttribute('url', projectData.marker_url);
+                    }
+                    // Si es un preset (hiro, kanji) no necesitamos hacer nada extra, ya está configurado por defecto.
 
-                model.addEventListener('model-loaded', () => {
-                    loader.style.display = 'none';
-                });
+                    console.log("Estableciendo URL del modelo:", projectData.model_url);
+                    model.setAttribute('gltf-model', `url(${projectData.model_url})`);
 
-                model.addEventListener('model-error', (e) => {
-                    console.error("Error al cargar el modelo 3D:", e.detail.src);
-                    showError("No se pudo cargar el modelo 3D. Verifique la URL.");
-                });
+                    model.addEventListener('model-loaded', () => {
+                        console.log("¡Modelo cargado exitosamente!");
+                        loader.style.display = 'none';
+                    });
 
-            } catch (error) {
-                console.error("Error al inicializar la escena de RA:", error);
-                 if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-                    showError("Error de Conexión (CORS): No se pudo conectar con la API. Por favor, verifique que el servidor de la API está en línea y que su configuración CORS permite peticiones desde este dominio.");
-                 } else {
+                    model.addEventListener('model-error', (e) => {
+                        console.error("Error al cargar el modelo 3D:", e.detail.src);
+                        showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS.");
+                    });
+
+                } catch (error) {
+                    console.error("Error al inicializar la escena de RA:", error);
                     showError(error.message);
-                 }
-            }
+                }
+            };
+
+            initializeScene();
         });
     </script>
 </body>
