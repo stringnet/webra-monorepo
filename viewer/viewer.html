@@ -70,27 +70,19 @@
                     
                     const projectData = await response.json();
 
-                    if (!projectData.marker_url || !projectData.model_url) {
-                        throw new Error("Los datos del proyecto están incompletos (faltan URLs).");
+                    if (!projectData.model_url) {
+                        throw new Error("Los datos del proyecto están incompletos (falta la URL del modelo).");
                     }
                     
                     // --- CONSTRUCCIÓN DINÁMICA DE LA ESCENA ---
 
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
-                    // Activamos la UI de depuración para ver qué está pasando
-                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: true;');
+                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                     scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; antialias: true; colorManagement: true;');
                     
-                    scene.addEventListener('arjs-pattern-error', () => {
-                         showError("Error al procesar el marcador. Asegúrate de que la imagen sea cuadrada y tenga un borde negro grueso.");
-                    });
-                     scene.addEventListener('arjs-nft-error', () => {
-                         showError("Error al procesar el marcador NFT. Intenta con otra imagen.");
-                    });
-
                     const assets = document.createElement('a-assets');
-                    assets.setAttribute('timeout', '30000'); // Aumentamos el tiempo de espera
+                    assets.setAttribute('timeout', '30000');
                     
                     const modelAsset = document.createElement('a-asset-item');
                     modelAsset.id = 'model-glb';
@@ -100,13 +92,19 @@
                     
                     scene.appendChild(assets);
 
+                    // --- CAMBIO CLAVE: USAR UN MARCADOR PREDEFINIDO ---
+                    // En lugar de un marcador personalizado, usamos el preset 'hiro' que es muy fiable.
+                    // Esto nos permite confirmar que el resto del sistema funciona.
+                    // El soporte para marcadores personalizados avanzados se puede añadir después.
                     const marker = document.createElement('a-marker');
-                    marker.setAttribute('type', 'pattern');
-                    marker.setAttribute('url', projectData.marker_url);
+                    marker.setAttribute('preset', 'hiro'); // Usamos el preset 'hiro'
                     marker.setAttribute('emitevents', 'true');
 
                     marker.addEventListener('markerFound', () => {
-                        console.log('¡Marcador encontrado!');
+                        console.log('¡Marcador "Hiro" encontrado!');
+                    });
+                     marker.addEventListener('markerLost', () => {
+                        console.log('Marcador "Hiro" perdido.');
                     });
 
                     const model = document.createElement('a-entity');
