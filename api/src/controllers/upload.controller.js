@@ -10,11 +10,9 @@ cloudinary.config({
 });
 
 export const getUploadSignature = (req, res) => {
-    // Obtenemos el timestamp actual en segundos
     const timestamp = Math.round((new Date).getTime()/1000);
 
     try {
-        // Generamos la firma usando el timestamp y nuestro API Secret
         const signature = cloudinary.utils.api_sign_request(
             {
                 timestamp: timestamp,
@@ -22,8 +20,12 @@ export const getUploadSignature = (req, res) => {
             process.env.CLOUDINARY_API_SECRET
         );
 
-        // Devolvemos la firma y el timestamp al frontend
-        res.status(200).json({ signature, timestamp });
+        // Devolvemos la firma, el timestamp Y LA API KEY al frontend
+        res.status(200).json({ 
+            signature, 
+            timestamp,
+            api_key: process.env.CLOUDINARY_API_KEY // <-- LÍNEA AÑADIDA
+        });
     } catch (error) {
         console.error("Error al generar la firma de Cloudinary:", error);
         res.status(500).json({ message: 'Error al generar la firma para la subida.' });

@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, Trash2, Edit, Sparkles, Wand2, PartyPopper, Target, LoaderCircle, PlusCircle, UploadCloud, FileCheck2 } from 'lucide-react';
 
 // =================================================================================
-// ¡ACCIÓN REQUERIDA! REEMPLAZA ESTOS VALORES
+// ¡ACCIÓN REQUERIDA! REEMPLAZA ESTE VALOR
 // =================================================================================
-// Pega aquí el "Cloud Name" y la "API Key" de tu cuenta de Cloudinary.
-// Los puedes encontrar en el dashboard principal de tu cuenta de Cloudinary.
-const CLOUDINARY_CLOUD_NAME = 'tu-cloud-name-aqui'; 
-const CLOUDINARY_API_KEY = 'tu-api-key-de-cloudinary'; 
+// Pega aquí únicamente el "Cloud Name" de tu cuenta de Cloudinary.
+// Esta clave es pública y segura de tener aquí.
+const CLOUDINARY_CLOUD_NAME = 'ditgncrxp'; 
 // =================================================================================
 
 // --- API Configuration ---
@@ -36,7 +35,8 @@ const apiService = {
     uploadToCloudinary: async (file, signatureData) => {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('api_key', CLOUDINARY_API_KEY); 
+        // AHORA USAMOS LA API_KEY QUE VIENE DE LA API DE FORMA SEGURA
+        formData.append('api_key', signatureData.api_key); 
         formData.append('timestamp', signatureData.timestamp);
         formData.append('signature', signatureData.signature);
 
@@ -140,7 +140,6 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
     const [markerType, setMarkerType] = useState('image');
     
-    // Estados para manejar la subida de archivos
     const [modelFile, setModelFile] = useState({ file: null, url: null, status: 'idle' }); // idle, uploading, done, error
     const [markerFile, setMarkerFile] = useState({ file: null, url: null, status: 'idle' });
 
