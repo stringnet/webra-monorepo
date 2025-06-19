@@ -53,13 +53,24 @@
     <div id="error-message"></div>
     <div id="gesture-hint">Use uno o dos dedos para mover, escalar y rotar el objeto.</div>
 
-    <!-- Escena de A-Frame con la estructura mínima -->
+    <!-- Escena de A-Frame con la estructura ya definida -->
     <a-scene
         id="ar-scene"
         vr-mode-ui="enabled: false"
         renderer="logarithmicDepthBuffer: true; antialias: true; colorManagement: true;"
         arjs="sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;"
     >
+        <!-- Marcador. Usamos Hiro por defecto para máxima fiabilidad. -->
+        <a-marker id="dynamic-marker" preset='hiro' emitevents="true">
+            <!-- Entidad del modelo. Se cargará dinámicamente -->
+            <a-entity
+                id="dynamic-model"
+                scale="0.1 0.1 0.1"
+                position="0 0.5 0"
+                rotation="-90 0 0"
+            ></a-entity>
+        </a-marker>
+        
         <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
     </a-scene>
 
@@ -71,6 +82,7 @@
             const errorMessage = document.getElementById('error-message');
             const scene = document.querySelector('a-scene');
             const gestureHint = document.getElementById('gesture-hint');
+            const model = document.getElementById('dynamic-model');
 
             const showError = (message) => {
                 errorMessage.textContent = message;
@@ -97,15 +109,15 @@
 
                 const onTouchMove = (e) => {
                     if (!modelEntity) return;
-                    const modelPosition = modelEntity.getAttribute('position');
-                    const modelScale = modelEntity.getAttribute('scale');
-                    const modelRotation = modelEntity.getAttribute('rotation');
+                    const modelPosition = modelEntity.object3D.position;
+                    const modelScale = modelEntity.object3D.scale;
+                    const modelRotation = modelEntity.object3D.rotation;
 
                     if (isDragging && e.touches.length === 1) {
                         const touch = e.touches[0];
                         const dx = (touch.clientX - previousTouch1.x) * 0.005;
                         const dy = (touch.clientY - previousTouch1.y) * -0.005;
-                        modelEntity.setAttribute('position', `${modelPosition.x + dx} ${modelPosition.y + dy} ${modelPosition.z}`);
+                        modelEntity.object3D.position.set(modelPosition.x + dx, modelPosition.y + dy, modelPosition.z);
                         previousTouch1 = { x: touch.clientX, y: touch.clientY };
                     }
 
@@ -113,12 +125,12 @@
                         const touch1 = e.touches[0]; const touch2 = e.touches[1];
                         const newDist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
                         const scaleFactor = newDist / initialDistance;
-                        modelEntity.setAttribute('scale', `${modelScale.x * scaleFactor} ${modelScale.y * scaleFactor} ${modelScale.z * scaleFactor}`);
+                        modelEntity.object3D.scale.set(modelScale.x * scaleFactor, modelScale.y * scaleFactor, modelScale.z * scaleFactor);
                         
                         const newAngle = Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * (180 / Math.PI);
                         const oldAngle = Math.atan2(previousTouch2.y - previousTouch1.y, previousTouch2.x - previousTouch1.x) * (180 / Math.PI);
                         const angleDelta = newAngle - oldAngle;
-                        modelEntity.setAttribute('rotation', `${modelRotation.x} ${modelRotation.y} ${modelRotation.z + angleDelta}`);
+                        modelEntity.object3D.rotation.z += angleDelta * (Math.PI / 180);
 
                         initialDistance = newDist;
                         previousTouch1 = { x: touch1.clientX, y: touch1.clientY };
@@ -135,45 +147,7 @@
                 scene.addEventListener('touchend', onTouchEnd);
             };
 
-            const buildScene = (projectData) => {
-                console.log("Construyendo escena con los datos:", projectData);
-
-                // 1. Crear el marcador
-                const marker = document.createElement('a-marker');
-                // Usamos el preset Hiro por defecto para la máxima fiabilidad inicial.
-                marker.setAttribute('preset', 'hiro');
-                marker.setAttribute('emitevents', 'true');
-                
-                marker.addEventListener('markerFound', () => console.log('Marcador encontrado!'));
-                marker.addEventListener('markerLost', () => console.log('Marcador perdido.'));
-
-                // 2. Crear la entidad del modelo 3D
-                const model = document.createElement('a-entity');
-                model.setAttribute('gltf-model', `url(${projectData.model_url})`);
-                model.setAttribute('scale', '0.1 0.1 0.1');
-                model.setAttribute('position', '0 0.5 0'); // Elevar un poco el modelo
-                model.setAttribute('rotation', '-90 0 0'); // Ajustar rotación si es necesario
-                model.setAttribute('animation-mixer', ''); // Activar animaciones
-                model.setAttribute('crossorigin', 'anonymous');
-
-                model.addEventListener('model-loaded', () => {
-                    console.log("¡Modelo 3D cargado exitosamente!");
-                    loader.style.display = 'none';
-                    gestureHint.style.display = 'block';
-                    setupGestureControls(model);
-                });
-                
-                model.addEventListener('model-error', (e) => {
-                    console.error("Error al cargar el modelo GLB:", e);
-                    showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS de Cloudinary.");
-                });
-                
-                // 3. Ensamblar y añadir a la escena
-                marker.appendChild(model);
-                scene.appendChild(marker);
-            };
-
-            const initialize = async () => {
+            const initializeScene = async () => {
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
@@ -186,19 +160,28 @@
                     const projectData = await response.json();
                     if (!projectData.model_url) throw new Error("Datos del proyecto incompletos.");
 
-                    // Esperamos a que la escena de A-Frame esté completamente cargada y lista
-                    if (scene.hasLoaded) {
-                        buildScene(projectData);
-                    } else {
-                        scene.addEventListener('loaded', () => buildScene(projectData), { once: true });
-                    }
+                    model.addEventListener('model-loaded', () => {
+                        console.log("¡Modelo 3D cargado exitosamente!");
+                        loader.style.display = 'none';
+                        gestureHint.style.display = 'block';
+                        setupGestureControls(model);
+                    });
+                     model.addEventListener('model-error', (e) => showError(`Error al cargar modelo.`));
+                    
+                    // Asignamos el modelo a la entidad existente
+                    model.setAttribute('gltf-model', `url(${projectData.model_url})`);
 
                 } catch (error) {
                     showError(error.message);
                 }
             };
-
-            initialize();
+            
+            // Esperamos a que la escena de A-Frame esté completamente cargada y lista
+            if (scene.hasLoaded) {
+                 initializeScene();
+            } else {
+                 scene.addEventListener('loaded', initializeScene, { once: true });
+            }
         });
     </script>
 </body>
