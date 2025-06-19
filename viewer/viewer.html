@@ -24,7 +24,7 @@
             justify-content: center;
             align-items: center;
             text-align: center;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.8);
             color: white;
             z-index: 2;
         }
@@ -32,6 +32,18 @@
             font-size: 1.2rem;
             max-width: 80%;
             margin: 10px 0;
+        }
+        .instruction-overlay button {
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #007aff;
+            background-color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            display: none; /* Oculto por defecto */
         }
         .instruction-overlay.hidden {
             display: none;
@@ -42,7 +54,8 @@
     <div class="ar-container">
         <!-- Overlay de instrucciones para guiar al usuario -->
         <div id="instruction-overlay" class="instruction-overlay">
-            <p>Mueve tu teléfono lentamente para detectar una superficie.</p>
+            <p id="instruction-text">Cargando datos del proyecto...</p>
+            <button id="enter-ar-btn">Iniciar RA</button>
         </div>
 
         <a-scene
@@ -90,6 +103,8 @@
             const reticle = document.getElementById('reticle');
             const modelContainer = document.getElementById('model-container');
             const instructionOverlay = document.getElementById('instruction-overlay');
+            const instructionText = document.getElementById('instruction-text');
+            const enterArBtn = document.getElementById('enter-ar-btn');
             let modelPlaced = false;
 
             const initializeScene = async () => {
@@ -110,38 +125,58 @@
                     modelAsset.addEventListener('loaded', () => {
                         const model = document.getElementById('dynamic-model');
                         model.setAttribute('gltf-model', '#model-asset');
+                        instructionText.textContent = '¡Listo para comenzar!';
+                        enterArBtn.style.display = 'block'; // Mostrar el botón
                     });
 
                 } catch (error) {
-                    instructionOverlay.innerHTML = `<p style="color: #ff4d4d;">Error: ${error.message}</p>`;
+                    instructionText.innerHTML = `<p style="color: #ff4d4d;">Error: ${error.message}</p>`;
                 }
             };
             
-            // Cuando AR.js encuentra una superficie, muestra el cursor
+            // --- GESTIÓN DE LA ENTRADA A RA ---
+            enterArBtn.addEventListener('click', async () => {
+                try {
+                    // La función enterVR() también inicia sesiones de AR
+                    await scene.enterVR();
+                } catch (e) {
+                     instructionText.innerHTML = `<p style="color: #ff4d4d;">Este dispositivo no soporta WebXR.</p>`;
+                }
+            });
+
+            scene.addEventListener('enter-vr', () => {
+                instructionText.textContent = 'Mueve tu teléfono lentamente para detectar una superficie.';
+                enterArBtn.style.display = 'none';
+            });
+            
+            scene.addEventListener('exit-vr', () => {
+                instructionText.textContent = 'Sesión de RA finalizada.';
+                instructionOverlay.classList.remove('hidden');
+                enterArBtn.style.display = 'block';
+            });
+
+            // --- GESTIÓN DE LA DETECCIÓN DE SUPERFICIES ---
             reticle.addEventListener('ar-hit-test-start', () => {
                  if (!modelPlaced) {
-                    instructionOverlay.innerHTML = `<p>Toca la pantalla para colocar el objeto.</p>`;
+                    instructionText.textContent = 'Toca la pantalla para colocar el objeto.';
                  }
             });
 
-            // Cuando se detecta una superficie, muestra el cursor (retículo)
             reticle.addEventListener('ar-hit-test-found', () => {
                 reticle.setAttribute('visible', true);
             });
 
-            // Cuando se pierde la superficie, oculta el cursor
             reticle.addEventListener('ar-hit-test-lost', () => {
                 reticle.setAttribute('visible', false);
             });
 
-            // Al tocar la pantalla, coloca el modelo en la posición del cursor
+            // --- GESTIÓN DE LA COLOCACIÓN DEL MODELO ---
             scene.addEventListener('click', (event) => {
                 if (!modelPlaced && reticle.getAttribute('visible')) {
                     const position = reticle.getAttribute('position');
                     modelContainer.setAttribute('position', position);
                     modelContainer.setAttribute('visible', 'true');
                     modelPlaced = true;
-                    // Oculta el cursor y las instrucciones una vez colocado
                     reticle.setAttribute('visible', false);
                     instructionOverlay.classList.add('hidden');
                 }
