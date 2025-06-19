@@ -11,12 +11,12 @@
         body { margin: 0; overflow: hidden; font-family: sans-serif; }
         .loader-container {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(255, 255, 255, 0.9); display: flex;
+            background-color: rgba(0, 0, 0, 0.8); display: flex;
             justify-content: center; align-items: center; z-index: 10000;
-            flex-direction: column; color: #333;
+            flex-direction: column; color: #fff;
         }
         .spinner {
-            border: 8px solid #f3f3f3; border-top: 8px solid #3498db;
+            border: 8px solid #444; border-top: 8px solid #fff;
             border-radius: 50%; width: 60px; height: 60px;
             animation: spin 1s linear infinite;
         }
@@ -36,25 +36,76 @@
 <body>
     <div id="loader" class="loader-container">
         <div class="spinner"></div>
-        <p id="loader-text" style="margin-top: 20px;">Cargando experiencia de RA...</p>
+        <p id="loader-text" style="margin-top: 20px;">Iniciando experiencia de RA...</p>
     </div>
     <div id="error-message"></div>
 
-    <!-- El body se deja intencionalmente vacío. La escena se añadirá con JS. -->
+    <!-- La escena se crea con los componentes básicos.
+         Los elementos de RA se añadirán dinámicamente. -->
+    <a-scene
+        id="ar-scene"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
+        arjs="sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;"
+    >
+        <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
+    </a-scene>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('load', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const loader = document.getElementById('loader');
+            const loaderText = document.getElementById('loader-text');
             const errorMessage = document.getElementById('error-message');
-            
+            const scene = document.querySelector('a-scene');
+
             const showError = (message) => {
                 errorMessage.textContent = message;
                 errorMessage.style.display = 'block';
                 loader.style.display = 'none';
             };
 
-            const initializeScene = async () => {
+            const buildScene = (projectData) => {
+                console.log("Construyendo escena con los datos:", projectData);
+                
+                // 1. Crear el marcador
+                const marker = document.createElement('a-marker');
+                // Usamos el preset Hiro por defecto para la máxima compatibilidad inicial.
+                // Si tienes un marcador personalizado, asegúrate de que sea un archivo .patt generado.
+                marker.setAttribute('preset', 'hiro'); 
+                marker.setAttribute('emitevents', 'true');
+                
+                marker.addEventListener('markerFound', () => console.log('Marcador encontrado!'));
+                marker.addEventListener('markerLost', () => console.log('Marcador perdido.'));
+
+                // 2. Crear la entidad del modelo 3D
+                const model = document.createElement('a-entity');
+                model.setAttribute('gltf-model', `url(${projectData.model_url})`);
+                model.setAttribute('scale', '0.05 0.05 0.05');
+                model.setAttribute('position', '0 0.5 0'); // Elevar un poco el modelo
+                model.setAttribute('rotation', '-90 0 0'); // Ajustar rotación si es necesario
+                model.setAttribute('animation-mixer', ''); // Activar animaciones
+                model.setAttribute('crossorigin', 'anonymous');
+
+                model.addEventListener('model-loaded', () => {
+                    console.log("¡Modelo 3D cargado exitosamente!");
+                    loaderText.textContent = 'Apunte al marcador Hiro para ver el modelo.';
+                    // Ocultamos el spinner, pero mantenemos el texto.
+                    const spinner = document.querySelector('.spinner');
+                    if(spinner) spinner.style.display = 'none';
+                });
+
+                model.addEventListener('model-error', (e) => {
+                    console.error("Error al cargar el modelo GLB:", e);
+                    showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS de Cloudinary.");
+                });
+                
+                // 3. Ensamblar y añadir a la escena
+                marker.appendChild(model);
+                scene.appendChild(marker);
+            };
+
+            const initialize = async () => {
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
@@ -62,82 +113,31 @@
                     if (!projectId) {
                         throw new Error("ID de proyecto no encontrado en la URL.");
                     }
-
+                    loaderText.textContent = `Cargando proyecto: ${projectId.substring(0, 8)}...`;
+                    
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
                     if (!response.ok) {
-                        throw new Error(`No se pudo cargar el proyecto (Error ${response.status})`);
+                        throw new Error(`Proyecto no encontrado o error de red (código: ${response.status})`);
                     }
-                    
                     const projectData = await response.json();
-
+                    
                     if (!projectData.model_url) {
-                        throw new Error("Los datos del proyecto están incompletos (falta la URL del modelo).");
+                        throw new Error("Los datos del proyecto no incluyen una URL de modelo válida.");
                     }
-                    
-                    // --- CONSTRUCCIÓN DINÁMICA DE LA ESCENA ---
 
-                    const scene = document.createElement('a-scene');
-                    scene.setAttribute('vr-mode-ui', 'enabled: false');
-                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; antialias: true; colorManagement: true;');
-                    
-                    const assets = document.createElement('a-assets');
-                    assets.setAttribute('timeout', '30000');
-                    
-                    const modelAsset = document.createElement('a-asset-item');
-                    modelAsset.id = 'model-glb';
-                    modelAsset.setAttribute('src', projectData.model_url);
-                    modelAsset.setAttribute('crossorigin', 'anonymous');
-                    assets.appendChild(modelAsset);
-                    
-                    scene.appendChild(assets);
+                    // Esperamos a que la escena de A-Frame esté completamente cargada y lista
+                    scene.addEventListener('loaded', () => {
+                        console.log("A-Frame y AR.js listos. Construyendo la escena de RA...");
+                        buildScene(projectData);
+                    }, { once: true });
 
-                    // --- CAMBIO CLAVE: USAR UN MARCADOR PREDEFINIDO ---
-                    // En lugar de un marcador personalizado, usamos el preset 'hiro' que es muy fiable.
-                    // Esto nos permite confirmar que el resto del sistema funciona.
-                    // El soporte para marcadores personalizados avanzados se puede añadir después.
-                    const marker = document.createElement('a-marker');
-                    marker.setAttribute('preset', 'hiro'); // Usamos el preset 'hiro'
-                    marker.setAttribute('emitevents', 'true');
-
-                    marker.addEventListener('markerFound', () => {
-                        console.log('¡Marcador "Hiro" encontrado!');
-                    });
-                     marker.addEventListener('markerLost', () => {
-                        console.log('Marcador "Hiro" perdido.');
-                    });
-
-                    const model = document.createElement('a-entity');
-                    model.setAttribute('gltf-model', '#model-glb');
-                    model.setAttribute('scale', '0.05 0.05 0.05');
-                    model.setAttribute('position', '0 0.5 0');
-                    model.setAttribute('rotation', '-90 0 0');
-                    model.setAttribute('animation-mixer', '');
-
-                    marker.appendChild(model);
-                    scene.appendChild(marker);
-
-                    const camera = document.createElement('a-entity');
-                    camera.setAttribute('camera', '');
-                    scene.appendChild(camera);
-
-                    document.body.appendChild(scene);
-                    
-                    assets.addEventListener('loaded', () => {
-                        console.log("Todos los assets han sido cargados.");
-                        loader.style.display = 'none';
-                    });
-                    assets.addEventListener('timeout', () => {
-                        showError("La carga de los archivos ha tardado demasiado. Verifica tu conexión a internet.");
-                    });
-                    
                 } catch (error) {
-                    console.error("Error al inicializar la escena de RA:", error);
+                    console.error("Error fatal al inicializar:", error);
                     showError(error.message);
                 }
             };
 
-            initializeScene();
+            initialize();
         });
     </script>
 </body>
