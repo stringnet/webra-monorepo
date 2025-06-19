@@ -39,23 +39,7 @@
     </div>
     <div id="error-message"></div>
 
-    <!-- Escena de A-Frame. -->
-    <a-scene id="ar-scene-container" vr-mode-ui="enabled: false" embedded arjs='sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;'>
-        
-        <!-- Marcador estático con un preset por defecto para evitar errores al inicio. -->
-        <a-marker id="dynamic-marker" preset='hiro'>
-            <!-- Entidad del modelo estática. -->
-            <a-entity
-                id="dynamic-model"
-                gltf-model=""
-                scale="0.05 0.05 0.05"
-                position="0 0 0"
-                crossorigin="anonymous"
-            ></a-entity>
-        </a-marker>
-        
-        <a-entity camera></a-entity>
-    </a-scene>
+    <!-- El body se deja intencionalmente vacío. La escena se añadirá con JS. -->
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -63,10 +47,6 @@
             const loader = document.getElementById('loader');
             const errorMessage = document.getElementById('error-message');
             
-            // Seleccionamos los elementos que ya existen en la escena
-            const marker = document.getElementById('dynamic-marker');
-            const model = document.getElementById('dynamic-model');
-
             const showError = (message) => {
                 errorMessage.textContent = message;
                 errorMessage.style.display = 'block';
@@ -81,48 +61,79 @@
                     if (!projectId) {
                         throw new Error("ID de proyecto no encontrado en la URL.");
                     }
-                    console.log(`Proyecto ID encontrado: ${projectId}`);
 
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
-                    
                     if (!response.ok) {
-                        // Lanzar un error específico y más útil para el usuario para el caso 404
-                        if (response.status === 404) {
-                            throw new Error(`El proyecto no existe o el enlace es incorrecto. Por favor, verifique la URL generada en el panel de administración.`);
-                        }
-                        throw new Error(`No se pudo cargar el proyecto (Error de red: ${response.status})`);
+                        throw new Error(`No se pudo cargar el proyecto (Error ${response.status})`);
                     }
                     
                     const projectData = await response.json();
 
-                    // Verificamos que las URLs no estén vacías
                     if (!projectData.marker_url || !projectData.model_url) {
                         throw new Error("Los datos del proyecto están incompletos (faltan URLs).");
                     }
                     
-                    console.log("Datos del proyecto cargados:", projectData);
+                    // --- CONSTRUCCIÓN DINÁMICA DE LA ESCENA ---
 
-                    // Si el marcador es de tipo 'pattern', actualizamos el componente a-marker
-                    if (projectData.marker_type === 'pattern' || projectData.marker_type === 'image') {
-                        console.log("Configurando marcador de tipo 'pattern' con URL:", projectData.marker_url);
-                        marker.setAttribute('type', 'pattern');
-                        marker.setAttribute('url', projectData.marker_url);
-                    }
-                    // Si es un preset (hiro, kanji) no necesitamos hacer nada extra, ya está configurado por defecto.
+                    // 1. Crear el elemento <a-scene>
+                    const scene = document.createElement('a-scene');
+                    scene.setAttribute('vr-mode-ui', 'enabled: false');
+                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
-                    // CORRECCIÓN: Se pasa la URL directamente, sin el formato url()
-                    console.log("Estableciendo URL del modelo:", projectData.model_url);
-                    model.setAttribute('gltf-model', projectData.model_url);
+                    // 2. Crear los assets para precargar el modelo y el marcador
+                    const assets = document.createElement('a-assets');
+                    
+                    // Asset para el marcador de imagen
+                    const markerAsset = document.createElement('img');
+                    markerAsset.id = 'marker-img';
+                    markerAsset.setAttribute('src', projectData.marker_url);
+                    markerAsset.setAttribute('crossorigin', 'anonymous');
+                    assets.appendChild(markerAsset);
+                    
+                    // Asset para el modelo 3D
+                    const modelAsset = document.createElement('a-asset-item');
+                    modelAsset.id = 'model-glb';
+                    modelAsset.setAttribute('src', projectData.model_url);
+                    modelAsset.setAttribute('crossorigin', 'anonymous');
+                    assets.appendChild(modelAsset);
+                    
+                    scene.appendChild(assets);
 
+                    // 3. Crear el elemento <a-marker>
+                    const marker = document.createElement('a-marker');
+                    marker.setAttribute('type', 'pattern');
+                    marker.setAttribute('url', projectData.marker_url);
+
+                    // 4. Crear el elemento <a-entity> para el modelo
+                    const model = document.createElement('a-entity');
+                    model.setAttribute('gltf-model', '#model-glb'); // Referenciar el asset
+                    model.setAttribute('scale', '0.05 0.05 0.05');
+                    model.setAttribute('position', '0 0.5 0'); // Elevarlo un poco sobre el marcador
+                    model.setAttribute('rotation', '-90 0 0');
+                    // Añadir animación
+                    model.setAttribute('animation-mixer', '');
+
+                    marker.appendChild(model);
+                    scene.appendChild(marker);
+
+                    // 5. Crear la cámara
+                    const camera = document.createElement('a-entity');
+                    camera.setAttribute('camera', '');
+                    scene.appendChild(camera);
+
+                    // 6. Añadir la escena completa al body del documento
+                    document.body.appendChild(scene);
+
+                    // Ocultar el loader cuando el modelo se haya cargado
                     model.addEventListener('model-loaded', () => {
-                        console.log("¡Modelo cargado exitosamente!");
                         loader.style.display = 'none';
                     });
-
-                    model.addEventListener('model-error', (e) => {
-                        console.error("Error al cargar el modelo 3D:", e.detail.src);
-                        showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS.");
+                    
+                    model.addEventListener('model-error', () => {
+                         showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS.");
                     });
+
 
                 } catch (error) {
                     console.error("Error al inicializar la escena de RA:", error);
