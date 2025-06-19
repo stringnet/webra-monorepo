@@ -4,7 +4,8 @@ import cors from 'cors';
 import 'dotenv/config';
 import authRoutes from './src/routes/auth.routes.js';
 import projectRoutes from './src/routes/project.routes.js';
-import uploadRoutes from './src/routes/upload.routes.js'; // <-- Importar new
+import uploadRoutes from './src/routes/upload.routes.js'; 
+import publicRoutes from './src/routes/public.routes.js'; // <-- Importar new
 import authMiddleware from './src/middleware/auth.middleware.js';
 import initializeDatabase from './src/db/init.db.js';
 
@@ -25,6 +26,7 @@ app.get('/', (req, res) => res.status(200).json({ message: 'API de WebRA funcion
 app.get('/health', (req, res) => { /* ... (código sin cambios) */ });
 
 // Rutas públicas (no requieren token)
+app.use('/api/public', checkDbReadiness, publicRoutes); // <-- NUEVA LÍNEA PARA RUTAS PÚBLICAS
 app.use('/api/auth', checkDbReadiness, authRoutes);
 
 // Rutas protegidas (requieren token)
