@@ -40,14 +40,31 @@
     </div>
     <div id="error-message"></div>
 
-    <!-- La escena se crea con los componentes básicos.
-         Los elementos de RA se añadirán dinámicamente. -->
+    <!-- Escena de A-Frame con la estructura ya definida -->
     <a-scene
         id="ar-scene"
         vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true;"
+        renderer="logarithmicDepthBuffer: true; antialias: true; colorManagement: true;"
         arjs="sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;"
     >
+        <!-- Sistema de Assets para precargar los archivos -->
+        <a-assets timeout="30000">
+            <a-asset-item id="model-glb" src="" crossorigin="anonymous"></a-asset-item>
+        </a-assets>
+
+        <!-- Marcador. Se configurará con JS -->
+        <a-marker id="dynamic-marker" type="pattern" url="">
+            <!-- Entidad del modelo. Se vinculará al asset con JS -->
+            <a-entity
+                id="dynamic-model"
+                gltf-model=""
+                scale="0.1 0.1 0.1"
+                position="0 0.5 0"
+                rotation="-90 0 0"
+                animation-mixer
+            ></a-entity>
+        </a-marker>
+        
         <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
     </a-scene>
 
@@ -65,71 +82,40 @@
                 loader.style.display = 'none';
             };
 
-            const buildScene = (projectData) => {
-                console.log("Construyendo escena con los datos:", projectData);
-                
-                // 1. Crear el marcador
-                const marker = document.createElement('a-marker');
-                // Usamos el preset Hiro por defecto para la máxima compatibilidad inicial.
-                // Si tienes un marcador personalizado, asegúrate de que sea un archivo .patt generado.
-                marker.setAttribute('preset', 'hiro'); 
-                marker.setAttribute('emitevents', 'true');
-                
-                marker.addEventListener('markerFound', () => console.log('Marcador encontrado!'));
-                marker.addEventListener('markerLost', () => console.log('Marcador perdido.'));
-
-                // 2. Crear la entidad del modelo 3D
-                const model = document.createElement('a-entity');
-                model.setAttribute('gltf-model', `url(${projectData.model_url})`);
-                model.setAttribute('scale', '0.05 0.05 0.05');
-                model.setAttribute('position', '0 0.5 0'); // Elevar un poco el modelo
-                model.setAttribute('rotation', '-90 0 0'); // Ajustar rotación si es necesario
-                model.setAttribute('animation-mixer', ''); // Activar animaciones
-                model.setAttribute('crossorigin', 'anonymous');
-
-                model.addEventListener('model-loaded', () => {
-                    console.log("¡Modelo 3D cargado exitosamente!");
-                    loaderText.textContent = 'Apunte al marcador Hiro para ver el modelo.';
-                    // Ocultamos el spinner, pero mantenemos el texto.
-                    const spinner = document.querySelector('.spinner');
-                    if(spinner) spinner.style.display = 'none';
-                });
-
-                model.addEventListener('model-error', (e) => {
-                    console.error("Error al cargar el modelo GLB:", e);
-                    showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS de Cloudinary.");
-                });
-                
-                // 3. Ensamblar y añadir a la escena
-                marker.appendChild(model);
-                scene.appendChild(marker);
-            };
-
-            const initialize = async () => {
+            const initializeScene = async () => {
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
 
-                    if (!projectId) {
-                        throw new Error("ID de proyecto no encontrado en la URL.");
-                    }
-                    loaderText.textContent = `Cargando proyecto: ${projectId.substring(0, 8)}...`;
+                    if (!projectId) throw new Error("ID de proyecto no encontrado.");
                     
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
-                    if (!response.ok) {
-                        throw new Error(`Proyecto no encontrado o error de red (código: ${response.status})`);
-                    }
-                    const projectData = await response.json();
+                    if (!response.ok) throw new Error(`Proyecto no encontrado (Error: ${response.status})`);
                     
-                    if (!projectData.model_url) {
-                        throw new Error("Los datos del proyecto no incluyen una URL de modelo válida.");
-                    }
+                    const projectData = await response.json();
+                    if (!projectData.model_url || !projectData.marker_url) throw new Error("Datos del proyecto incompletos.");
+                    
+                    // --- ACTUALIZACIÓN DE LA ESCENA ---
+                    const modelAsset = document.getElementById('model-glb');
+                    const marker = document.getElementById('dynamic-marker');
+                    const model = document.getElementById('dynamic-model');
 
-                    // Esperamos a que la escena de A-Frame esté completamente cargada y lista
-                    scene.addEventListener('loaded', () => {
-                        console.log("A-Frame y AR.js listos. Construyendo la escena de RA...");
-                        buildScene(projectData);
-                    }, { once: true });
+                    // Esperamos a que los assets terminen de cargarse
+                    modelAsset.addEventListener('loaded', () => {
+                        console.log("¡Modelo 3D cargado exitosamente en los assets!");
+                        model.setAttribute('gltf-model', '#model-glb'); // Vinculamos el modelo una vez cargado
+                        loaderText.textContent = 'Apunte al marcador para ver el modelo.';
+                        const spinner = document.querySelector('.spinner');
+                        if(spinner) spinner.style.display = 'none';
+                    });
+                     modelAsset.addEventListener('error', () => {
+                        showError("Error al cargar el archivo del modelo 3D.");
+                    });
+                    
+                    // Configuramos las URLs
+                    marker.setAttribute('url', projectData.marker_url);
+                    modelAsset.setAttribute('src', projectData.model_url);
+
 
                 } catch (error) {
                     console.error("Error fatal al inicializar:", error);
@@ -137,7 +123,12 @@
                 }
             };
 
-            initialize();
+            // Esperamos a que la escena de A-Frame esté completamente cargada y lista
+            if (scene.hasLoaded) {
+                 initializeScene();
+            } else {
+                 scene.addEventListener('loaded', initializeScene, { once: true });
+            }
         });
     </script>
 </body>
