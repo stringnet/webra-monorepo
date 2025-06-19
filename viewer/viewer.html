@@ -29,6 +29,7 @@
             transform: translateX(-50%); background-color: #ff4d4d;
             color: white; padding: 15px; border-radius: 8px;
             z-index: 10001; display: none; text-align: center; max-width: 90%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
     </style>
 </head>
@@ -75,23 +76,22 @@
                     
                     // --- CONSTRUCCIÓN DINÁMICA DE LA ESCENA ---
 
-                    // 1. Crear el elemento <a-scene>
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
-                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+                    // Activamos la UI de depuración para ver qué está pasando
+                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: true;');
+                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; antialias: true; colorManagement: true;');
+                    
+                    scene.addEventListener('arjs-pattern-error', () => {
+                         showError("Error al procesar el marcador. Asegúrate de que la imagen sea cuadrada y tenga un borde negro grueso.");
+                    });
+                     scene.addEventListener('arjs-nft-error', () => {
+                         showError("Error al procesar el marcador NFT. Intenta con otra imagen.");
+                    });
 
-                    // 2. Crear los assets para precargar el modelo y el marcador
                     const assets = document.createElement('a-assets');
+                    assets.setAttribute('timeout', '30000'); // Aumentamos el tiempo de espera
                     
-                    // Asset para el marcador de imagen
-                    const markerAsset = document.createElement('img');
-                    markerAsset.id = 'marker-img';
-                    markerAsset.setAttribute('src', projectData.marker_url);
-                    markerAsset.setAttribute('crossorigin', 'anonymous');
-                    assets.appendChild(markerAsset);
-                    
-                    // Asset para el modelo 3D
                     const modelAsset = document.createElement('a-asset-item');
                     modelAsset.id = 'model-glb';
                     modelAsset.setAttribute('src', projectData.model_url);
@@ -100,41 +100,39 @@
                     
                     scene.appendChild(assets);
 
-                    // 3. Crear el elemento <a-marker>
                     const marker = document.createElement('a-marker');
                     marker.setAttribute('type', 'pattern');
                     marker.setAttribute('url', projectData.marker_url);
+                    marker.setAttribute('emitevents', 'true');
 
-                    // 4. Crear el elemento <a-entity> para el modelo
+                    marker.addEventListener('markerFound', () => {
+                        console.log('¡Marcador encontrado!');
+                    });
+
                     const model = document.createElement('a-entity');
-                    model.setAttribute('gltf-model', '#model-glb'); // Referenciar el asset
+                    model.setAttribute('gltf-model', '#model-glb');
                     model.setAttribute('scale', '0.05 0.05 0.05');
-                    model.setAttribute('position', '0 0.5 0'); // Elevarlo un poco sobre el marcador
+                    model.setAttribute('position', '0 0.5 0');
                     model.setAttribute('rotation', '-90 0 0');
-                    // Añadir animación
                     model.setAttribute('animation-mixer', '');
 
                     marker.appendChild(model);
                     scene.appendChild(marker);
 
-                    // 5. Crear la cámara
                     const camera = document.createElement('a-entity');
                     camera.setAttribute('camera', '');
                     scene.appendChild(camera);
 
-                    // 6. Añadir la escena completa al body del documento
                     document.body.appendChild(scene);
-
-                    // Ocultar el loader cuando el modelo se haya cargado
-                    model.addEventListener('model-loaded', () => {
+                    
+                    assets.addEventListener('loaded', () => {
+                        console.log("Todos los assets han sido cargados.");
                         loader.style.display = 'none';
                     });
-                    
-                    model.addEventListener('model-error', () => {
-                         showError("No se pudo cargar el modelo 3D. Verifique la URL y la configuración CORS.");
+                    assets.addEventListener('timeout', () => {
+                        showError("La carga de los archivos ha tardado demasiado. Verifica tu conexión a internet.");
                     });
-
-
+                    
                 } catch (error) {
                     console.error("Error al inicializar la escena de RA:", error);
                     showError(error.message);
