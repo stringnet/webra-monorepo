@@ -110,8 +110,9 @@
                     }
                     // Si es un preset (hiro, kanji) no necesitamos hacer nada extra, ya está configurado por defecto.
 
+                    // CORRECCIÓN: Se pasa la URL directamente, sin el formato url()
                     console.log("Estableciendo URL del modelo:", projectData.model_url);
-                    model.setAttribute('gltf-model', `url(${projectData.model_url})`);
+                    model.setAttribute('gltf-model', projectData.model_url);
 
                     model.addEventListener('model-loaded', () => {
                         console.log("¡Modelo cargado exitosamente!");
