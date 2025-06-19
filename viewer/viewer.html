@@ -49,18 +49,19 @@
     >
         <!-- Sistema de Assets para precargar los archivos -->
         <a-assets timeout="30000">
-            <a-asset-item id="model-glb" src="" crossorigin="anonymous"></a-asset-item>
+            <!-- USAMOS UN MODELO DE PRUEBA DE A-FRAME -->
+            <a-asset-item id="model-glb" src="https://cdn.aframe.io/test-models/models/glTF-2.0/virtualcity/VC.gltf" crossorigin="anonymous"></a-asset-item>
         </a-assets>
 
         <!-- Marcador. Se configurará con JS -->
-        <a-marker id="dynamic-marker" type="pattern" url="">
+        <a-marker id="dynamic-marker" preset='hiro'>
             <!-- Entidad del modelo. Se vinculará al asset con JS -->
             <a-entity
                 id="dynamic-model"
-                gltf-model=""
+                gltf-model="#model-glb"
                 scale="0.1 0.1 0.1"
                 position="0 0.5 0"
-                rotation="-90 0 0"
+                rotation="0 0 0"
                 animation-mixer
             ></a-entity>
         </a-marker>
@@ -70,65 +71,31 @@
 
     <script>
         window.addEventListener('load', () => {
-            const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const loader = document.getElementById('loader');
             const loaderText = document.getElementById('loader-text');
-            const errorMessage = document.getElementById('error-message');
             const scene = document.querySelector('a-scene');
 
-            const showError = (message) => {
-                errorMessage.textContent = message;
-                errorMessage.style.display = 'block';
-                loader.style.display = 'none';
-            };
-
-            const initializeScene = async () => {
-                try {
-                    const pathParts = window.location.pathname.split('/');
-                    const projectId = pathParts.pop() || pathParts.pop();
-
-                    if (!projectId) throw new Error("ID de proyecto no encontrado.");
-                    
-                    const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
-                    if (!response.ok) throw new Error(`Proyecto no encontrado (Error: ${response.status})`);
-                    
-                    const projectData = await response.json();
-                    if (!projectData.model_url || !projectData.marker_url) throw new Error("Datos del proyecto incompletos.");
-                    
-                    // --- ACTUALIZACIÓN DE LA ESCENA ---
-                    const modelAsset = document.getElementById('model-glb');
-                    const marker = document.getElementById('dynamic-marker');
-                    const model = document.getElementById('dynamic-model');
-
-                    // Esperamos a que los assets terminen de cargarse
-                    modelAsset.addEventListener('loaded', () => {
-                        console.log("¡Modelo 3D cargado exitosamente en los assets!");
-                        model.setAttribute('gltf-model', '#model-glb'); // Vinculamos el modelo una vez cargado
-                        loaderText.textContent = 'Apunte al marcador para ver el modelo.';
-                        const spinner = document.querySelector('.spinner');
-                        if(spinner) spinner.style.display = 'none';
-                    });
-                     modelAsset.addEventListener('error', () => {
-                        showError("Error al cargar el archivo del modelo 3D.");
-                    });
-                    
-                    // Configuramos las URLs
-                    marker.setAttribute('url', projectData.marker_url);
-                    modelAsset.setAttribute('src', projectData.model_url);
-
-
-                } catch (error) {
-                    console.error("Error fatal al inicializar:", error);
-                    showError(error.message);
-                }
-            };
+            const model = document.getElementById('dynamic-model');
 
             // Esperamos a que la escena de A-Frame esté completamente cargada y lista
-            if (scene.hasLoaded) {
-                 initializeScene();
+             if (scene.hasLoaded) {
+                console.log("A-Frame y AR.js listos.");
+                loaderText.textContent = 'Apunte al marcador Hiro para ver el modelo.';
+                const spinner = document.querySelector('.spinner');
+                if(spinner) spinner.style.display = 'none';
             } else {
-                 scene.addEventListener('loaded', initializeScene, { once: true });
+                 scene.addEventListener('loaded', () => {
+                    console.log("A-Frame y AR.js listos.");
+                    loaderText.textContent = 'Apunte al marcador Hiro para ver el modelo.';
+                    const spinner = document.querySelector('.spinner');
+                    if(spinner) spinner.style.display = 'none';
+                 }, { once: true });
             }
+
+            model.addEventListener('model-error', (e) => {
+                console.error("Error al cargar el modelo de prueba GLB:", e);
+                showError("No se pudo cargar el modelo de prueba.");
+            });
         });
     </script>
 </body>
