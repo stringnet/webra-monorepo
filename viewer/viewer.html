@@ -31,7 +31,7 @@
             z-index: 10001; display: none; text-align: center; max-width: 90%;
             box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
-        #gesture-hint {
+         #gesture-hint {
             position: absolute;
             bottom: 20px;
             width: 100%;
@@ -62,18 +62,20 @@
     >
         <!-- Sistema de Assets para precargar los archivos -->
         <a-assets timeout="30000">
-            <a-asset-item id="model-glb" src="" crossorigin="anonymous"></a-asset-item>
+            <!-- Modelo de prueba de A-Frame -->
+            <a-asset-item id="model-glb" src="https://cdn.aframe.io/test-models/models/glTF-2.0/Duck/glTF-Binary/Duck.glb" crossorigin="anonymous"></a-asset-item>
         </a-assets>
 
         <!-- Marcador. Usamos Hiro por defecto para máxima fiabilidad. -->
-        <a-marker id="dynamic-marker" preset='hiro'>
+        <a-marker preset='hiro'>
             <!-- Entidad del modelo. -->
             <a-entity
                 id="dynamic-model"
-                gltf-model=""
+                gltf-model="#model-glb"
                 scale="0.05 0.05 0.05"
                 position="0 0.5 0"
                 rotation="-90 0 0"
+                animation-mixer
             ></a-entity>
         </a-marker>
         
@@ -82,125 +84,94 @@
 
     <script>
         window.addEventListener('load', () => {
-            const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const loader = document.getElementById('loader');
             const loaderText = document.getElementById('loader-text');
-            const errorMessage = document.getElementById('error-message');
-            const gestureHint = document.getElementById('gesture-hint');
             const scene = document.querySelector('a-scene');
             const model = document.getElementById('dynamic-model');
-            const marker = document.getElementById('dynamic-marker');
+            const gestureHint = document.getElementById('gesture-hint');
 
-            const showError = (message) => {
-                errorMessage.textContent = message;
-                errorMessage.style.display = 'block';
+            // Función para iniciar la manipulación por gestos (se llamará cuando el modelo cargue)
+            const setupGestureControls = () => {
+                let isDragging = false;
+                let isPinching = false;
+                let previousTouch1 = null;
+                let previousTouch2 = null;
+                let initialDistance = 0;
+
+                const onTouchStart = (e) => {
+                    if (e.touches.length === 1) {
+                        isDragging = true;
+                        previousTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    }
+                    if (e.touches.length === 2) {
+                        isPinching = true;
+                        previousTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                        previousTouch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+                        initialDistance = Math.hypot(previousTouch1.x - previousTouch2.x, previousTouch1.y - previousTouch2.y);
+                    }
+                };
+
+                const onTouchMove = (e) => {
+                    const modelPosition = model.getAttribute('position');
+                    const modelScale = model.getAttribute('scale');
+                    const modelRotation = model.getAttribute('rotation');
+
+                    if (isDragging && e.touches.length === 1) {
+                        const touch = e.touches[0];
+                        const dx = (touch.clientX - previousTouch1.x) * 0.005;
+                        const dy = (touch.clientY - previousTouch1.y) * -0.005;
+                        model.setAttribute('position', `${modelPosition.x + dx} ${modelPosition.y + dy} ${modelPosition.z}`);
+                        previousTouch1 = { x: touch.clientX, y: touch.clientY };
+                    }
+
+                    if (isPinching && e.touches.length === 2) {
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        const newDist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+                        const scaleFactor = newDist / initialDistance;
+                        model.setAttribute('scale', `${modelScale.x * scaleFactor} ${modelScale.y * scaleFactor} ${modelScale.z * scaleFactor}`);
+                        
+                        const newAngle = Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * (180 / Math.PI);
+                        const oldAngle = Math.atan2(previousTouch2.y - previousTouch1.y, previousTouch2.x - previousTouch1.x) * (180 / Math.PI);
+                        const angleDelta = newAngle - oldAngle;
+                        model.setAttribute('rotation', `${modelRotation.x} ${modelRotation.y} ${modelRotation.z + angleDelta}`);
+
+                        initialDistance = newDist;
+                        previousTouch1 = { x: touch1.clientX, y: touch1.clientY };
+                        previousTouch2 = { x: touch2.clientX, y: touch2.clientY };
+                    }
+                };
+
+                const onTouchEnd = (e) => {
+                    if (e.touches.length < 2) isPinching = false;
+                    if (e.touches.length < 1) isDragging = false;
+                };
+
+                scene.addEventListener('touchstart', onTouchStart);
+                scene.addEventListener('touchmove', onTouchMove);
+                scene.addEventListener('touchend', onTouchEnd);
+            };
+
+            // Esperamos a que la escena de A-Frame esté completamente cargada
+            scene.addEventListener('loaded', () => {
+                console.log("A-Frame y AR.js listos.");
+                loaderText.textContent = 'Apunte al marcador Hiro para ver el modelo.';
+                const spinner = document.querySelector('.spinner');
+                if(spinner) spinner.style.display = 'none';
+            }, { once: true });
+            
+            // Cuando el modelo de prueba se cargue, ocultamos el loader y activamos los gestos.
+            model.addEventListener('model-loaded', () => {
+                console.log("¡Modelo de prueba cargado!");
                 loader.style.display = 'none';
-            };
+                gestureHint.style.display = 'block';
+                setupGestureControls();
+            }, { once: true });
 
-            const initializeScene = async () => {
-                try {
-                    const pathParts = window.location.pathname.split('/');
-                    const projectId = pathParts.pop() || pathParts.pop();
-
-                    if (!projectId) throw new Error("ID de proyecto no encontrado.");
-                    
-                    const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
-                    if (!response.ok) throw new Error(`Proyecto no encontrado (Error: ${response.status})`);
-                    
-                    const projectData = await response.json();
-                    if (!projectData.model_url) throw new Error("Datos del proyecto incompletos.");
-                    
-                    const modelAsset = document.getElementById('model-glb');
-                    
-                    modelAsset.addEventListener('loaded', () => {
-                        model.setAttribute('gltf-model', '#model-glb');
-                        loader.style.display = 'none';
-                        gestureHint.style.display = 'block';
-                    });
-                     modelAsset.addEventListener('error', () => showError("Error al cargar el archivo del modelo 3D."));
-                    
-                    // Configuramos las URLs
-                    marker.setAttribute('type', projectData.marker_type === 'image' ? 'pattern' : 'hiro');
-                    marker.setAttribute('url', projectData.marker_type === 'image' ? projectData.marker_url : '');
-                    modelAsset.setAttribute('src', projectData.model_url);
-
-                } catch (error) {
-                    showError(error.message);
-                }
-            };
-            
-            // --- LÓGICA DE GESTOS TÁCTILES ---
-            let isDragging = false;
-            let isPinching = false;
-            let previousTouch1 = null;
-            let previousTouch2 = null;
-            let initialDistance = 0;
-            
-            const onTouchStart = (e) => {
-                if (e.touches.length === 1) {
-                    isDragging = true;
-                    previousTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                }
-                if (e.touches.length === 2) {
-                    isPinching = true;
-                    previousTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                    previousTouch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
-                    initialDistance = Math.hypot(previousTouch1.x - previousTouch2.x, previousTouch1.y - previousTouch2.y);
-                }
-            };
-
-            const onTouchMove = (e) => {
-                const modelPosition = model.getAttribute('position');
-                const modelScale = model.getAttribute('scale');
-                const modelRotation = model.getAttribute('rotation');
-
-                // Arrastrar (Mover)
-                if (isDragging && e.touches.length === 1) {
-                    const touch = e.touches[0];
-                    const dx = (touch.clientX - previousTouch1.x) * 0.005;
-                    const dy = (touch.clientY - previousTouch1.y) * -0.005; // Invertido
-                    model.setAttribute('position', `${modelPosition.x + dx} ${modelPosition.y + dy} ${modelPosition.z}`);
-                    previousTouch1 = { x: touch.clientX, y: touch.clientY };
-                }
-
-                // Pellizcar y Girar
-                if (isPinching && e.touches.length === 2) {
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-
-                    // Escalar
-                    const newDist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
-                    const scaleFactor = newDist / initialDistance;
-                    model.setAttribute('scale', `${modelScale.x * scaleFactor} ${modelScale.y * scaleFactor} ${modelScale.z * scaleFactor}`);
-                    
-                    // Rotar
-                    const newAngle = Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * (180 / Math.PI);
-                    const oldAngle = Math.atan2(previousTouch2.y - previousTouch1.y, previousTouch2.x - previousTouch1.x) * (180 / Math.PI);
-                    const angleDelta = newAngle - oldAngle;
-                    model.setAttribute('rotation', `${modelRotation.x} ${modelRotation.y} ${modelRotation.z + angleDelta}`);
-
-                    // Actualizar para el siguiente movimiento
-                    initialDistance = newDist;
-                    previousTouch1 = { x: touch1.clientX, y: touch1.clientY };
-                    previousTouch2 = { x: touch2.clientX, y: touch2.clientY };
-                }
-            };
-
-            const onTouchEnd = (e) => {
-                if (e.touches.length < 2) isPinching = false;
-                if (e.touches.length < 1) isDragging = false;
-            };
-
-            scene.addEventListener('touchstart', onTouchStart);
-            scene.addEventListener('touchmove', onTouchMove);
-            scene.addEventListener('touchend', onTouchEnd);
-
-            // Iniciar la carga de la escena
-            if (scene.hasLoaded) {
-                 initializeScene();
-            } else {
-                 scene.addEventListener('loaded', initializeScene, { once: true });
-            }
+            model.addEventListener('model-error', (e) => {
+                console.error("Error al cargar el modelo de prueba GLB:", e);
+                showError("No se pudo cargar el modelo de prueba.");
+            });
         });
     </script>
 </body>
