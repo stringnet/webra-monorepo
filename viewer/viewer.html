@@ -4,162 +4,100 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
-    <!-- Importamos A-Frame y AR.js -->
+    <!-- Importamos A-Frame -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        .loader-container {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.8); display: flex;
-            justify-content: center; align-items: center; z-index: 10000;
-            flex-direction: column; color: #fff;
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        .ar-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
         }
-        .spinner {
-            border: 8px solid #444; border-top: 8px solid #fff;
-            border-radius: 50%; width: 60px; height: 60px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        #error-message {
-            position: absolute; bottom: 20px; left: 50%;
-            transform: translateX(-50%); background-color: #ff4d4d;
-            color: white; padding: 15px; border-radius: 8px;
-            z-index: 10001; display: none; text-align: center; max-width: 90%;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        }
-         #gesture-hint {
+        .instruction-overlay {
             position: absolute;
-            bottom: 20px;
-            width: 100%;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             text-align: center;
+            background-color: rgba(0, 0, 0, 0.7);
             color: white;
-            background-color: rgba(0,0,0,0.5);
-            padding: 10px 0;
-            z-index: 9999;
-            font-size: 14px;
-            display: none; /* Oculto por defecto */
+            z-index: 2;
+        }
+        .instruction-overlay p {
+            font-size: 1.2rem;
+            max-width: 80%;
+            margin: 10px 0;
+        }
+        .instruction-overlay.hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <div id="loader" class="loader-container">
-        <div class="spinner"></div>
-        <p id="loader-text" style="margin-top: 20px;">Iniciando experiencia de RA...</p>
-    </div>
-    <div id="error-message"></div>
-    <div id="gesture-hint">Use uno o dos dedos para mover, escalar y rotar el objeto.</div>
+    <div class="ar-container">
+        <!-- Overlay de instrucciones para guiar al usuario -->
+        <div id="instruction-overlay" class="instruction-overlay">
+            <p>Mueve tu teléfono lentamente para detectar una superficie.</p>
+        </div>
 
-    <!-- Escena de A-Frame con la estructura ya definida -->
-    <a-scene
-        id="ar-scene"
-        vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true; antialias: true; colorManagement: true;"
-        arjs="sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;"
-    >
-        <!-- Sistema de Assets para precargar los archivos -->
-        <a-assets timeout="30000">
-            <a-asset-item id="model-asset" src="" crossorigin="anonymous"></a-asset-item>
-        </a-assets>
+        <a-scene
+            id="ar-scene"
+            webxr="requiredFeatures: hit-test,local-floor; optionalFeatures: dom-overlay; overlayElement: .ar-container"
+            vr-mode-ui="enabled: false"
+            renderer="logarithmicDepthBuffer: true; antialias: true; colorManagement: true;"
+        >
+            <a-assets timeout="30000">
+                <a-asset-item id="model-asset" src="" crossorigin="anonymous"></a-asset-item>
+            </a-assets>
 
-        <!-- Marcador. Usamos Hiro por defecto para máxima fiabilidad. -->
-        <a-marker id="dynamic-marker" preset='hiro' emitevents="true">
-            <!-- Entidad del modelo. -->
+            <a-camera position="0 1.6 0"></a-camera>
+
+            <!-- Cursor que se muestra sobre la superficie detectada -->
             <a-entity
-                id="dynamic-model"
-                scale="0.1 0.1 0.1"
-                position="0 0.5 0"
-                rotation="-90 0 0"
-                animation-mixer
-            ></a-entity>
-        </a-marker>
-        
-        <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
-    </a-scene>
+                id="reticle"
+                ar-hit-test="target: #model-container; type: ar"
+                visible="false"
+            >
+                <a-ring
+                    rotation="-90 0 0"
+                    radius-inner="0.1"
+                    radius-outer="0.15"
+                    color="#007aff"
+                ></a-ring>
+            </a-entity>
+
+            <!-- Contenedor para el modelo, inicialmente invisible y fuera de la vista -->
+            <a-entity id="model-container" position="0 -100 0">
+                 <a-entity
+                    id="dynamic-model"
+                    scale="0.1 0.1 0.1"
+                    gltf-model=""
+                    animation-mixer
+                ></a-entity>
+            </a-entity>
+        </a-scene>
+    </div>
 
     <script>
-        window.addEventListener('load', () => {
+        document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
-            const loader = document.getElementById('loader');
-            const loaderText = document.getElementById('loader-text');
-            const errorMessage = document.getElementById('error-message');
             const scene = document.querySelector('a-scene');
-            const gestureHint = document.getElementById('gesture-hint');
-            const model = document.getElementById('dynamic-model');
-
-            const showError = (message) => {
-                errorMessage.textContent = message;
-                errorMessage.style.display = 'block';
-                loader.style.display = 'none';
-            };
-            
-            const setupGestureControls = (modelEntity) => {
-                let isDragging = false;
-                let isPinching = false;
-                let previousTouch1 = null;
-                let previousTouch2 = null;
-                let initialDistance = 0;
-
-                const onTouchStart = (e) => {
-                    if (e.touches.length === 1) isDragging = true;
-                    if (e.touches.length === 2) isPinching = true;
-                    previousTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                    if (e.touches.length === 2) {
-                         previousTouch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
-                         initialDistance = Math.hypot(previousTouch1.x - previousTouch2.x, previousTouch1.y - previousTouch2.y);
-                    }
-                };
-
-                const onTouchMove = (e) => {
-                    if (!modelEntity) return;
-                    const modelPosition = modelEntity.object3D.position;
-                    const modelScale = modelEntity.object3D.scale;
-                    const modelRotation = modelEntity.object3D.rotation;
-
-                    if (isDragging && e.touches.length === 1) {
-                        const touch = e.touches[0];
-                        const dx = (touch.clientX - previousTouch1.x) * 0.005;
-                        const dy = (touch.clientY - previousTouch1.y) * -0.005;
-                        modelEntity.object3D.position.set(modelPosition.x + dx, modelPosition.y + dy, modelPosition.z);
-                        previousTouch1 = { x: touch.clientX, y: touch.clientY };
-                    }
-
-                    if (isPinching && e.touches.length === 2) {
-                        const touch1 = e.touches[0]; const touch2 = e.touches[1];
-                        const newDist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
-                        const scaleFactor = newDist / initialDistance;
-                        modelEntity.object3D.scale.set(modelScale.x * scaleFactor, modelScale.y * scaleFactor, modelScale.z * scaleFactor);
-                        
-                        const newAngle = Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * (180 / Math.PI);
-                        const oldAngle = Math.atan2(previousTouch2.y - previousTouch1.y, previousTouch2.x - previousTouch1.x) * (180 / Math.PI);
-                        const angleDelta = newAngle - oldAngle;
-                        modelEntity.object3D.rotation.z += angleDelta * (Math.PI / 180);
-
-                        initialDistance = newDist;
-                        previousTouch1 = { x: touch1.clientX, y: touch1.clientY };
-                        previousTouch2 = { x: touch2.clientX, y: touch2.clientY };
-                    }
-                };
-                const onTouchEnd = (e) => {
-                    if (e.touches.length < 2) isPinching = false;
-                    if (e.touches.length < 1) isDragging = false;
-                };
-
-                scene.addEventListener('touchstart', onTouchStart);
-                scene.addEventListener('touchmove', onTouchMove);
-                scene.addEventListener('touchend', onTouchEnd);
-            };
+            const reticle = document.getElementById('reticle');
+            const modelContainer = document.getElementById('model-container');
+            const instructionOverlay = document.getElementById('instruction-overlay');
+            let modelPlaced = false;
 
             const initializeScene = async () => {
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
-
                     if (!projectId) throw new Error("ID de proyecto no encontrado.");
-                    
+
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error: ${response.status})`);
                     
@@ -167,37 +105,50 @@
                     if (!projectData.model_url) throw new Error("Datos del proyecto incompletos.");
                     
                     const modelAsset = document.getElementById('model-asset');
-                    const marker = document.getElementById('dynamic-marker');
+                    modelAsset.setAttribute('src', projectData.model_url);
                     
                     modelAsset.addEventListener('loaded', () => {
-                        console.log("¡Modelo 3D cargado exitosamente en los assets!");
+                        const model = document.getElementById('dynamic-model');
                         model.setAttribute('gltf-model', '#model-asset');
-                        loader.style.display = 'none';
-                        gestureHint.style.display = 'block';
-                        setupGestureControls(model);
                     });
-                     modelAsset.addEventListener('error', (e) => showError(`Error al cargar modelo.`));
-                    
-                    // Asignamos la URL del marcador personalizado si existe, si no, se queda con 'hiro'
-                    if (projectData.marker_type === 'image' && projectData.marker_url) {
-                         marker.setAttribute('type', 'pattern');
-                         marker.setAttribute('url', projectData.marker_url);
-                    }
-                    
-                    // Asignamos el src al asset para que comience la descarga
-                    modelAsset.setAttribute('src', projectData.model_url);
 
                 } catch (error) {
-                    showError(error.message);
+                    instructionOverlay.innerHTML = `<p style="color: #ff4d4d;">Error: ${error.message}</p>`;
                 }
             };
             
-            // Esperamos a que la escena de A-Frame esté completamente cargada y lista
-            if (scene.hasLoaded) {
-                 initializeScene();
-            } else {
-                 scene.addEventListener('loaded', initializeScene, { once: true });
-            }
+            // Cuando AR.js encuentra una superficie, muestra el cursor
+            reticle.addEventListener('ar-hit-test-start', () => {
+                 if (!modelPlaced) {
+                    instructionOverlay.innerHTML = `<p>Toca la pantalla para colocar el objeto.</p>`;
+                 }
+            });
+
+            // Cuando se detecta una superficie, muestra el cursor (retículo)
+            reticle.addEventListener('ar-hit-test-found', () => {
+                reticle.setAttribute('visible', true);
+            });
+
+            // Cuando se pierde la superficie, oculta el cursor
+            reticle.addEventListener('ar-hit-test-lost', () => {
+                reticle.setAttribute('visible', false);
+            });
+
+            // Al tocar la pantalla, coloca el modelo en la posición del cursor
+            scene.addEventListener('click', (event) => {
+                if (!modelPlaced && reticle.getAttribute('visible')) {
+                    const position = reticle.getAttribute('position');
+                    modelContainer.setAttribute('position', position);
+                    modelContainer.setAttribute('visible', 'true');
+                    modelPlaced = true;
+                    // Oculta el cursor y las instrucciones una vez colocado
+                    reticle.setAttribute('visible', false);
+                    instructionOverlay.classList.add('hidden');
+                }
+            });
+
+            // Inicializamos la carga de datos del proyecto
+            initializeScene();
         });
     </script>
 </body>
