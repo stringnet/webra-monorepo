@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, Trash2, Edit, Sparkles, Wand2, PartyPopper, Target, LoaderCircle, PlusCircle } from 'lucide-react';
+import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, Trash2, Edit, Sparkles, Wand2, PartyPopper, Target, LoaderCircle, PlusCircle, UploadCloud, FileCheck2 } from 'lucide-react';
 
 // --- API Configuration ---
 const API_URL = 'https://apiwebra.scanmee.io';
+// DEBES REEMPLAZAR ESTO con el "Cloud Name" de tu cuenta de Cloudinary
+const CLOUDINARY_CLOUD_NAME = 'tu-cloud-name-aqui'; 
+// DEBES REEMPLAZAR ESTO con tu API Key de Cloudinary
+const CLOUDINARY_API_KEY = 'tu-api-key-de-cloudinary'; 
+
 
 // --- Helper Function ---
 const decodeJwt = (token) => {
@@ -16,40 +21,49 @@ const decodeJwt = (token) => {
 
 // --- API Service ---
 const apiService = {
+    getSignature: async (token) => {
+        const response = await fetch(`${API_URL}/api/upload/signature`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('No se pudo obtener la firma para la subida.');
+        return response.json();
+    },
+    uploadToCloudinary: async (file, signatureData) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', CLOUDINARY_API_KEY); 
+        formData.append('timestamp', signatureData.timestamp);
+        formData.append('signature', signatureData.signature);
+
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) throw new Error('La subida a Cloudinary falló.');
+        return response.json();
+    },
     getProjects: async (token) => {
         const response = await fetch(`${API_URL}/api/projects`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Error al obtener los proyectos.');
-        }
+        if (!response.ok) throw new Error('Error al obtener los proyectos.');
         return response.json();
     },
     createProject: async (token, projectData) => {
         const response = await fetch(`${API_URL}/api/projects`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
             body: JSON.stringify(projectData)
         });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Error al crear el proyecto.');
-        }
+        if (!response.ok) throw new Error('Error al crear el proyecto.');
         return response.json();
     }
 };
 
 
 // --- COMPONENTES DE LA UI ---
-
 const SidebarHeader = () => (
     <div className="p-4 pb-2 flex justify-between items-center">
         <div className="flex items-center space-x-3">
@@ -58,7 +72,6 @@ const SidebarHeader = () => (
         </div>
     </div>
 );
-
 const SidebarItem = ({ icon, text, active, onClick }) => (
     <li className="px-4">
         <a href="#" onClick={onClick} className={`flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>
@@ -67,7 +80,6 @@ const SidebarItem = ({ icon, text, active, onClick }) => (
         </a>
     </li>
 );
-
 const UserProfile = ({ user, onLogout }) => (
     <div className="px-4 border-t border-gray-700 mt-auto pt-4 mb-4">
         <div className="flex items-center">
@@ -82,7 +94,6 @@ const UserProfile = ({ user, onLogout }) => (
         </div>
     </div>
 );
-
 const Sidebar = ({ user, onLogout, onNavigate, activeView, isOpen, setIsOpen }) => (
     <>
         <aside className={`fixed inset-y-0 left-0 bg-gray-800 shadow-xl z-40 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-in-out w-64 flex-shrink-0 flex flex-col`}>
@@ -99,7 +110,6 @@ const Sidebar = ({ user, onLogout, onNavigate, activeView, isOpen, setIsOpen }) 
         {isOpen && <div className="fixed inset-0 bg-black opacity-50 z-30 md:hidden" onClick={() => setIsOpen(false)}></div>}
     </>
 );
-
 const StatCard = ({ title, value, icon, change, changeType }) => (
     <div className="bg-white rounded-xl shadow-md p-6 flex items-center justify-between transition-transform hover:scale-105">
         <div>
@@ -113,46 +123,89 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
         <div className="bg-blue-100 p-4 rounded-full">{icon}</div>
     </div>
 );
-
 const MarketingIdeasModal = ({ project, onClose }) => {
     // Código del modal de Gemini sin cambios
 };
 
-// Componente Modal para crear un nuevo proyecto
+// --- COMPONENTE MODAL DE CREACIÓN DE PROYECTO (ACTUALIZADO) ---
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
-    const [modelUrl, setModelUrl] = useState('');
-    const [markerUrl, setMarkerUrl] = useState('');
     const [markerType, setMarkerType] = useState('image');
+    const [modelFile, setModelFile] = useState({ url: null, status: 'idle' }); // idle, uploading, done, error
+    const [markerFile, setMarkerFile] = useState({ url: null, status: 'idle' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const handleFileChange = async (file, fileType) => {
+        if (!file) return;
+
+        const updateState = fileType === 'model' ? setModelFile : setMarkerFile;
+        updateState({ url: null, status: 'uploading' });
+
+        try {
+            const token = localStorage.getItem('webar_token');
+            const signatureData = await apiService.getSignature(token);
+            const uploadResult = await apiService.uploadToCloudinary(file, signatureData);
+            updateState({ url: uploadResult.secure_url, status: 'done' });
+        } catch (err) {
+            console.error(`Error al subir ${fileType}:`, err);
+            updateState({ url: null, status: 'error' });
+            setError(`Error al subir el archivo ${fileType}.`);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        setLoading(true);
+        
+        if (modelFile.status !== 'done' || markerFile.status !== 'done') {
+            setError('Por favor, espera a que todos los archivos se hayan subido.');
+            return;
+        }
 
+        setLoading(true);
         const projectData = {
             name: name,
-            model_url: modelUrl,
+            model_url: modelFile.url,
             marker_type: markerType,
-            marker_url: markerUrl,
+            marker_url: markerFile.url,
         };
         
         try {
             const token = localStorage.getItem('webar_token');
-            if (!token) throw new Error("No hay token de autenticación.");
-            
             const newProject = await apiService.createProject(token, projectData);
             onProjectCreated(newProject);
             onClose();
-
         } catch (err) {
             setError(err.message || "Ocurrió un error desconocido.");
         } finally {
             setLoading(false);
         }
     };
+
+    const FileInput = ({ label, onFileSelect, status }) => (
+        <div>
+            <label className="block text-sm font-medium text-gray-700">{label}</label>
+            <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 ${status === 'error' ? 'border-red-400' : 'border-gray-300'} border-dashed rounded-md`}>
+                <div className="space-y-1 text-center">
+                    {status === 'idle' && <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />}
+                    {status === 'uploading' && <LoaderCircle className="mx-auto h-12 w-12 text-blue-500 animate-spin" />}
+                    {status === 'done' && <FileCheck2 className="mx-auto h-12 w-12 text-green-500" />}
+                    {status === 'error' && <X className="mx-auto h-12 w-12 text-red-500" />}
+                    
+                    <div className="flex text-sm text-gray-600">
+                        <label htmlFor={label} className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                            <span>Selecciona un archivo</span>
+                            <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} />
+                        </label>
+                    </div>
+                     <p className="text-xs text-gray-500">
+                        {status === 'done' ? '¡Archivo subido!' : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}
+                     </p>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
@@ -166,26 +219,15 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                             <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nombre del Proyecto</label>
                             <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
                         </div>
-                        <div>
-                            <label htmlFor="model_url" className="block text-sm font-medium text-gray-700">URL del Modelo 3D (.glb, .gltf)</label>
-                            <input type="url" id="model_url" value={modelUrl} onChange={(e) => setModelUrl(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="https://..." required />
-                        </div>
-                        <div>
-                            <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
-                             <select id="marker_type" value={markerType} onChange={(e) => setMarkerType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                                <option value="image">Imagen</option>
-                                <option value="qr">Código QR</option>
-                            </select>
-                        </div>
-                         <div>
-                            <label htmlFor="marker_url" className="block text-sm font-medium text-gray-700">URL del Marcador (Imagen)</label>
-                            <input type="url" id="marker_url" value={markerUrl} onChange={(e) => setMarkerUrl(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="https://..." required />
-                        </div>
+
+                        <FileInput label="Modelo 3D" onFileSelect={(file) => handleFileChange(file, 'model')} status={modelFile.status} />
+                        <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} />
+                        
                         {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-md">{error}</p>}
                     </div>
                     <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
-                        <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">Cancelar</button>
-                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none" disabled={loading}>
+                        <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</button>
+                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700" disabled={loading || modelFile.status !== 'done' || markerFile.status !== 'done'}>
                             {loading ? <LoaderCircle className="animate-spin" /> : 'Crear Proyecto'}
                         </button>
                     </div>
@@ -197,7 +239,6 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
 
 
 // --- VISTAS PRINCIPALES ---
-
 const DashboardView = ({ user }) => (
     <div>
         <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
@@ -216,7 +257,7 @@ const ProjectsView = () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('webar_token');
-            if (!token) throw new Error("No se encontró token de autenticación.");
+            if (!token) throw new Error("No se encontró token.");
             const data = await apiService.getProjects(token);
             setProjects(data);
         } catch (err) {
@@ -245,7 +286,7 @@ const ProjectsView = () => {
                 </button>
             </div>
             <div className="mt-8 bg-white rounded-xl shadow-md overflow-x-auto">
-                {loading ? (
+                 {loading ? (
                     <div className="flex justify-center items-center p-10"><LoaderCircle className="animate-spin text-blue-500" size={40} /><span className="ml-4 text-gray-600">Cargando proyectos...</span></div>
                 ) : error ? (
                     <div className="text-center p-10 text-red-500 bg-red-50"><strong>Error:</strong> {error}</div>
@@ -369,6 +410,7 @@ const DashboardPage = ({ user, onLogout }) => {
 };
 
 
+// --- COMPONENTE PRINCIPAL DE LA APLICACIÓN ---
 export default function App() {
     const [user, setUser] = useState(null);
     const [authReady, setAuthReady] = useState(false);
