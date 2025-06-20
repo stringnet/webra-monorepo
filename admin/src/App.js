@@ -4,6 +4,8 @@ import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, 
 // =================================================================================
 // ¡ACCIÓN REQUERIDA! REEMPLAZA ESTE VALOR
 // =================================================================================
+// Pega aquí únicamente el "Cloud Name" de tu cuenta de Cloudinary.
+// Esta clave es pública y segura de tener aquí.
 const CLOUDINARY_CLOUD_NAME = 'ditgncrxp'; 
 // =================================================================================
 
@@ -16,35 +18,18 @@ const decodeJwt = (token) => {
     try {
         return JSON.parse(atob(token.split('.')[1]));
     } catch (e) {
+        console.error("Error decoding JWT", e);
         return null;
     }
 };
 
 // --- API Service ---
 const apiService = {
-    getProjects: async (token) => {
-        const response = await fetch(`${API_URL}/api/projects`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!response.ok) throw new Error('Error al obtener los proyectos.');
-        return response.json();
-    },
-    createProject: async (token, projectData) => {
-        const response = await fetch(`${API_URL}/api/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`}, body: JSON.stringify(projectData) });
-        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
-        return response.json();
-    },
-    updateProject: async (token, projectId, projectData) => {
-        const response = await fetch(`${API_URL}/api/projects/${projectId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`}, body: JSON.stringify(projectData) });
-        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
-        return response.json();
-    },
-    deleteProject: async (token, projectId) => {
-        const response = await fetch(`${API_URL}/api/projects/${projectId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
-        return response.json();
-    },
     getSignature: async (token) => {
-        const response = await fetch(`${API_URL}/api/upload/signature`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!response.ok) throw new Error('No se pudo obtener la firma.');
+        const response = await fetch(`${API_URL}/api/upload/signature`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('No se pudo obtener la firma para la subida.');
         return response.json();
     },
     uploadToCloudinary: async (file, signatureData) => {
@@ -53,8 +38,61 @@ const apiService = {
         formData.append('api_key', signatureData.api_key); 
         formData.append('timestamp', signatureData.timestamp);
         formData.append('signature', signatureData.signature);
-        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, { method: 'POST', body: formData });
-        if (!response.ok) throw new Error('La subida a Cloudinary falló.');
+
+        const resourceType = file.type.startsWith('video') ? 'video' : 'auto';
+
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            console.error("Cloudinary upload failed response:", await response.text());
+            throw new Error('La subida a Cloudinary falló.');
+        }
+        return response.json();
+    },
+    getProjects: async (token) => {
+        const response = await fetch(`${API_URL}/api/projects`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Error al obtener los proyectos.');
+        return response.json();
+    },
+    createProject: async (token, projectData) => {
+        const response = await fetch(`${API_URL}/api/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify(projectData)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Error al crear el proyecto.');
+        }
+        return response.json();
+    },
+    updateProject: async (token, projectId, projectData) => {
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify(projectData)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Error al actualizar el proyecto.');
+        }
+        return response.json();
+    },
+    deleteProject: async (token, projectId) => {
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Error al eliminar el proyecto.');
+        }
         return response.json();
     },
     getUsers: async (token) => {
@@ -140,7 +178,7 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
         <div className="bg-blue-100 p-4 rounded-full">{icon}</div>
     </div>
 );
-const MarketingIdeasModal = ({ project, onClose }) => { /* ... */ };
+const MarketingIdeasModal = ({ project, onClose }) => { return null };
 const QRCodeModal = ({ url, onClose }) => {
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
     return (
@@ -154,7 +192,7 @@ const QRCodeModal = ({ url, onClose }) => {
         </div>
     );
 };
-const FileInput = ({ label, onFileSelect, status, fileName }) => (
+const FileInput = ({ label, onFileSelect, status, fileName, accept }) => (
     <div>
         <label className="block text-sm font-medium text-gray-700">{label}</label>
         <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 ${status === 'error' ? 'border-red-400' : 'border-gray-300'} border-dashed rounded-md`}>
@@ -166,25 +204,26 @@ const FileInput = ({ label, onFileSelect, status, fileName }) => (
                 <div className="flex text-sm text-gray-600">
                     <label htmlFor={label} className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
                         <span>{status === 'done' ? 'Cambiar archivo' : 'Selecciona un archivo'}</span>
-                        <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} />
+                        <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} accept={accept} />
                     </label>
                 </div>
-                 <p className="text-xs text-gray-500">{status === 'done' ? fileName : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}</p>
+                 <p className="text-xs text-gray-500">{status === 'done' ? fileName : accept.replaceAll(',',', ')}</p>
             </div>
         </div>
     </div>
 );
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
+    const [assetType, setAssetType] = useState('model');
     const [markerType, setMarkerType] = useState('image');
-    const [modelFile, setModelFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
+    const [assetFile, setAssetFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [markerFile, setMarkerFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleFileChange = async (file, fileType) => {
         if (!file) return;
-        const updateState = fileType === 'model' ? setModelFile : setMarkerFile;
+        const updateState = fileType === 'asset' ? setAssetFile : setMarkerFile;
         updateState({ file, url: null, public_id: null, status: 'uploading' });
 
         try {
@@ -202,17 +241,18 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         e.preventDefault();
         setError('');
         const isMarkerRequired = markerType === 'image';
-        if (modelFile.status !== 'done' || (isMarkerRequired && markerFile.status !== 'done')) {
+        if (assetFile.status !== 'done' || (isMarkerRequired && markerFile.status !== 'done')) {
             setError('Por favor, sube todos los archivos requeridos.');
             return;
         }
         setLoading(true);
         const projectData = {
             name,
-            model_url: modelFile.url,
+            asset_type: assetType,
+            model_url: assetFile.url,
             marker_type: markerType,
             marker_url: isMarkerRequired ? markerFile.url : null,
-            model_public_id: modelFile.public_id,
+            model_public_id: assetFile.public_id,
             marker_public_id: isMarkerRequired ? markerFile.public_id : null,
         };
         try {
@@ -238,15 +278,34 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                             <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" required />
                         </div>
                         <div>
+                            <label htmlFor="asset_type" className="block text-sm font-medium text-gray-700">Tipo de Contenido</label>
+                            <select id="asset_type" value={assetType} onChange={(e) => setAssetType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm">
+                                <option value="model">Modelo 3D</option>
+                                <option value="video">Video</option>
+                            </select>
+                        </div>
+                        <FileInput 
+                            label={assetType === 'model' ? "Modelo 3D" : "Video con transparencia"}
+                            onFileSelect={(file) => handleFileChange(file, 'asset')} 
+                            status={assetFile.status} 
+                            fileName={assetFile.file?.name}
+                            accept={assetType === 'model' ? ".glb,.gltf,.fbx,.obj" : ".webm,.mp4"}
+                        />
+                         <div>
                             <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
                             <select id="marker_type" value={markerType} onChange={(e) => setMarkerType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm">
                                 <option value="image">Imagen</option>
                                 <option value="qr">Código QR</option>
                             </select>
                         </div>
-                        <FileInput label="Modelo 3D" onFileSelect={(file) => handleFileChange(file, 'model')} status={modelFile.status} fileName={modelFile.file?.name} />
                         {markerType === 'image' && (
-                            <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} fileName={markerFile.file?.name} />
+                            <FileInput 
+                                label="Marcador (Imagen)" 
+                                onFileSelect={(file) => handleFileChange(file, 'marker')} 
+                                status={markerFile.status} 
+                                fileName={markerFile.file?.name}
+                                accept="image/png,image/jpeg"
+                            />
                         )}
                         {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-md">{error}</p>}
                     </div>
