@@ -214,7 +214,7 @@ const FileInput = ({ label, onFileSelect, status, fileName, accept }) => (
 );
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
-    const [assetType, setAssetType] = useState('model');
+    const [assetType, setAssetType] = useState('model'); // Nuevo estado
     const [markerType, setMarkerType] = useState('image');
     const [assetFile, setAssetFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [markerFile, setMarkerFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
@@ -248,7 +248,7 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         setLoading(true);
         const projectData = {
             name,
-            asset_type: assetType,
+            asset_type: assetType, // <-- Enviar el nuevo tipo
             model_url: assetFile.url,
             marker_type: markerType,
             marker_url: isMarkerRequired ? markerFile.url : null,
@@ -289,7 +289,7 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                             onFileSelect={(file) => handleFileChange(file, 'asset')} 
                             status={assetFile.status} 
                             fileName={assetFile.file?.name}
-                            accept={assetType === 'model' ? ".glb,.gltf,.fbx,.obj" : ".webm,.mp4"}
+                            accept={assetType === 'model' ? ".glb,.gltf" : ".webm,.mp4"}
                         />
                          <div>
                             <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
@@ -555,7 +555,7 @@ const ProjectsView = ({user}) => {
                             {projects.length > 0 ? projects.map(project => (
                                 <tr key={project.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{project.name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${project.marker_type === 'image' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>{project.marker_type}</span></td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${project.asset_type === 'model' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>{project.asset_type}</span></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500 hover:underline"><a href={project.view_url} target="_blank" rel="noopener noreferrer">{project.view_url}</a></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
                                         <div className="flex items-center justify-center space-x-1">
