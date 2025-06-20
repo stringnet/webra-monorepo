@@ -6,7 +6,8 @@ export const getPublicProject = async (req, res) => {
     try {
         const { projectId } = req.params;
         const project = await pool.query(
-            'SELECT name, model_url, marker_type, marker_url FROM ar_projects WHERE id = $1',
+            //'SELECT name, model_url, marker_type, marker_url FROM ar_projects WHERE id = $1',
+              'SELECT name, model_url, marker_type, marker_url, asset_type FROM ar_projects WHERE id = $1', // <-- Añadir asset_type
             [projectId]
         );
 

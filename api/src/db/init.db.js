@@ -28,6 +28,7 @@ const initializeDatabase = async () => {
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 name VARCHAR(150) NOT NULL,
+                asset_type VARCHAR(50) DEFAULT 'model' NOT NULL,
                 model_url VARCHAR(255) NOT NULL,
                 model_public_id VARCHAR(255),
                 video_url VARCHAR(255),
