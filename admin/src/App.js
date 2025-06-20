@@ -549,7 +549,7 @@ const ProjectsView = ({user}) => {
                 ) : (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
-                            <tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Vista</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr>
+                            <tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contenido</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL Vista</th><th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {projects.length > 0 ? projects.map(project => (
@@ -701,7 +701,7 @@ const LoginPage = ({ onLogin }) => {
                     <h2 className="text-2xl font-bold text-white text-center mb-1">Bienvenido de nuevo</h2><p className="text-center text-gray-400 mb-6">Inicia sesión para continuar</p>
                     <form onSubmit={handleSubmit}>
                         <div className="mb-4"><label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="email">Correo Electrónico</label><input className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" id="email" type="email" placeholder="tu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={loading} /></div>
-                        <div className="mb-6"><label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="password">Contraseña</label><input className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" id="password" type="password" placeholder="******************" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} /></div>
+                        <div className="mb-6"><label className="block text-sm font-bold mb-2" htmlFor="password">Contraseña</label><input className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" id="password" type="password" placeholder="******************" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} /></div>
                         {error && <p className="text-red-500 text-xs text-center mb-4 bg-red-500/10 p-2 rounded-lg">{error}</p>}
                         <div className="flex items-center justify-between">
                             <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all duration-200 flex items-center justify-center disabled:bg-blue-800" type="submit" disabled={loading}>
