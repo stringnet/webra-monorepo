@@ -1,7 +1,6 @@
-// api/src/controllers/project.controller.js
 import pool from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
-import { v2 as cloudinary } from 'cloudinary'; // Importar Cloudinary
+import { v2 as cloudinary } from 'cloudinary';
 
 // Obtener todos los proyectos del usuario autenticado
 export const getProjects = async (req, res) => {
@@ -16,9 +15,8 @@ export const getProjects = async (req, res) => {
     }
 };
 
-// Crear un nuevo proyecto (ACTUALIZADO)
+// Crear un nuevo proyecto
 export const createProject = async (req, res) => {
-    // Ahora recibimos los public_id desde el frontend
     const { name, model_url, marker_type, marker_url, model_public_id, marker_public_id } = req.body;
     const userId = req.user.id;
 
@@ -42,7 +40,7 @@ export const createProject = async (req, res) => {
     }
 };
 
-// Actualizar un proyecto (NUEVO)
+// Actualizar un proyecto
 export const updateProject = async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
@@ -65,7 +63,7 @@ export const updateProject = async (req, res) => {
     }
 };
 
-// Eliminar un proyecto (NUEVO)
+// Eliminar un proyecto
 export const deleteProject = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
@@ -99,4 +97,3 @@ export const deleteProject = async (req, res) => {
         res.status(500).send('Error del servidor');
     }
 };
-
