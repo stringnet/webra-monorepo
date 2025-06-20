@@ -35,10 +35,10 @@ const apiService = {
     uploadToCloudinary: async (file, signatureData) => {
         const formData = new FormData();
         formData.append('file', file);
-        // AHORA USAMOS LA API_KEY QUE VIENE DE LA API DE FORMA SEGURA
         formData.append('api_key', signatureData.api_key); 
         formData.append('timestamp', signatureData.timestamp);
         formData.append('signature', signatureData.signature);
+        formData.append('upload_preset', 'ml_default'); // Usar un preset si es necesario
 
         const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, {
             method: 'POST',
@@ -98,7 +98,7 @@ const apiService = {
 
 
 // --- COMPONENTES DE LA UI ---
-const SidebarHeader = () => (
+const SidebarHeader = ({ user }) => (
     <div className="p-4 pb-2 flex justify-between items-center">
         <div className="flex items-center space-x-3">
             <div className="bg-blue-600 p-2 rounded-lg"><Share2 className="w-6 h-6 text-white" /></div>
@@ -131,7 +131,7 @@ const UserProfile = ({ user, onLogout }) => (
 const Sidebar = ({ user, onLogout, onNavigate, activeView, isOpen, setIsOpen }) => (
     <>
         <aside className={`fixed inset-y-0 left-0 bg-gray-800 shadow-xl z-40 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-in-out w-64 flex-shrink-0 flex flex-col`}>
-            <SidebarHeader />
+            <SidebarHeader user={user} />
             <nav className="mt-6 flex-grow">
                 <ul>
                     <SidebarItem icon={<LayoutDashboard size={20} />} text="Dashboard" active={activeView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
@@ -157,15 +157,31 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
         <div className="bg-blue-100 p-4 rounded-full">{icon}</div>
     </div>
 );
-const MarketingIdeasModal = ({ project, onClose }) => {
-    // Código del modal de Gemini sin cambios
+const MarketingIdeasModal = ({ project, onClose }) => { /* ... */ };
+
+// --- NUEVO COMPONENTE: MODAL PARA MOSTRAR QR ---
+const QRCodeModal = ({ url, onClose }) => {
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 text-center relative">
+                 <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 p-1 rounded-full"><X size={24} /></button>
+                 <h2 className="text-xl font-bold text-gray-800 mb-4">Escanea para ver en RA</h2>
+                 <img src={qrApiUrl} alt="Código QR" className="mx-auto" />
+                 <p className="text-xs text-gray-500 mt-4 break-all">{url}</p>
+            </div>
+        </div>
+    );
 };
 
-// --- COMPONENTE MODAL DE CREACIÓN DE PROYECTO ---
+// --- COMPONENTE MODAL DE CREACIÓN DE PROYECTO (ACTUALIZADO) ---
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
+    const [markerType, setMarkerType] = useState('image');
+    
     const [modelFile, setModelFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [markerFile, setMarkerFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
+
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -188,18 +204,21 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        if (modelFile.status !== 'done' || markerFile.status !== 'done') {
-            setError('Por favor, espera a que todos los archivos se hayan subido.');
+
+        const isMarkerRequired = markerType === 'image';
+        if (modelFile.status !== 'done' || (isMarkerRequired && markerFile.status !== 'done')) {
+            setError('Por favor, sube todos los archivos requeridos.');
             return;
         }
+
         setLoading(true);
         const projectData = {
             name,
             model_url: modelFile.url,
-            marker_type: 'image',
-            marker_url: markerFile.url,
+            marker_type: markerType,
+            marker_url: isMarkerRequired ? markerFile.url : null,
             model_public_id: modelFile.public_id,
-            marker_public_id: markerFile.public_id,
+            marker_public_id: isMarkerRequired ? markerFile.public_id : null,
         };
         try {
             const token = localStorage.getItem('webar_token');
@@ -237,20 +256,29 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform transition-all">
-                <div className="p-6 border-b border-gray-200"><h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="text-blue-500 mr-2" />Crear Nuevo Proyecto</h2></div>
+                <div className="p-6 border-b border-gray-200"><h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="mr-2" />Crear Nuevo Proyecto</h2></div>
                 <form onSubmit={handleSubmit}>
                     <div className="p-6 space-y-4">
                         <div>
                             <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nombre del Proyecto</label>
-                            <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
+                            <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" required />
+                        </div>
+                        <div>
+                            <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
+                            <select id="marker_type" value={markerType} onChange={(e) => setMarkerType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm">
+                                <option value="image">Imagen</option>
+                                <option value="qr">Código QR</option>
+                            </select>
                         </div>
                         <FileInput label="Modelo 3D" onFileSelect={(file) => handleFileChange(file, 'model')} status={modelFile.status} fileName={modelFile.file?.name} />
-                        <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} fileName={markerFile.file?.name} />
+                        {markerType === 'image' && (
+                            <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} fileName={markerFile.file?.name} />
+                        )}
                         {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-md">{error}</p>}
                     </div>
                     <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
                         <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</button>
-                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400" disabled={loading || modelFile.status !== 'done' || markerFile.status !== 'done'}>
+                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400" disabled={loading}>
                             {loading ? <LoaderCircle className="animate-spin" /> : 'Crear Proyecto'}
                         </button>
                     </div>
@@ -259,6 +287,7 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         </div>
     );
 };
+
 
 // --- NUEVO COMPONENTE: MODAL DE EDICIÓN ---
 const EditProjectModal = ({ project, onClose, onProjectUpdated }) => {
@@ -324,6 +353,7 @@ const ProjectsView = () => {
     const [error, setError] = useState(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
+    const [qrCodeUrl, setQrCodeUrl] = useState(null); // Estado para el modal de QR
 
     const fetchProjects = async () => {
         setLoading(true);
@@ -366,6 +396,7 @@ const ProjectsView = () => {
         <div>
             {isCreateModalOpen && <CreateProjectModal onClose={() => setIsCreateModalOpen(false)} onProjectCreated={handleProjectCreated} />}
             {editingProject && <EditProjectModal project={editingProject} onClose={() => setEditingProject(null)} onProjectUpdated={handleProjectUpdated} />}
+            {qrCodeUrl && <QRCodeModal url={qrCodeUrl} onClose={() => setQrCodeUrl(null)} />}
             
             <div className="flex justify-between items-center">
                 <div><h1 className="text-3xl font-bold text-gray-800">Proyectos de Realidad Aumentada</h1><p className="text-gray-500 mt-1">Crea, gestiona y comparte tus experiencias de RA.</p></div>
@@ -387,12 +418,11 @@ const ProjectsView = () => {
                             {projects.length > 0 ? projects.map(project => (
                                 <tr key={project.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{project.name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${project.marker_type === 'image' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>{project.marker_type === 'image' ? 'Imagen' : 'Código QR'}</span></td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${project.marker_type === 'image' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>{project.marker_type}</span></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500 hover:underline"><a href={project.view_url} target="_blank" rel="noopener noreferrer">{project.view_url}</a></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
                                         <div className="flex items-center justify-center space-x-1">
-                                            <button className="text-gray-400 hover:text-yellow-500 p-2 rounded-full transition-colors" title="Asistente de Marketing IA"><Sparkles size={18} /></button>
-                                            <button className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors" title="Ver Código QR"><QrCode size={18} /></button>
+                                            <button onClick={() => setQrCodeUrl(project.view_url)} className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors" title="Ver Código QR"><QrCode size={18} /></button>
                                             <button onClick={() => setEditingProject(project)} className="text-gray-400 hover:text-green-600 p-2 rounded-full transition-colors" title="Editar"><Edit size={18} /></button>
                                             <button onClick={() => handleDelete(project.id)} className="text-gray-400 hover:text-red-600 p-2 rounded-full transition-colors" title="Eliminar"><Trash2 size={18} /></button>
                                         </div>
