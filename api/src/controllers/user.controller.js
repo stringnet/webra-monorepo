@@ -2,13 +2,14 @@
 import pool from '../db/db.js';
 import bcrypt from 'bcryptjs';
 
-// Obtener todos los usuarios
+// Obtener todos los usuarios (VERSIÓN CORREGIDA)
 export const getUsers = async (req, res) => {
     try {
-        // Excluimos al propio administrador de la lista
+        // Excluimos al propio administrador de la lista usando su ID, que sí está en el token
+        const adminId = req.user.id;
         const users = await pool.query(
-            "SELECT u.id, u.name, u.email, u.project_limit, u.is_active, u.created_at, r.name as role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email != $1 ORDER BY u.created_at DESC",
-            [req.user.email] 
+            "SELECT u.id, u.name, u.email, u.project_limit, u.is_active, u.created_at, r.name as role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id != $1 ORDER BY u.created_at DESC",
+            [adminId] 
         );
         res.status(200).json(users.rows);
     } catch (err) {
@@ -45,7 +46,7 @@ export const createUser = async (req, res) => {
     }
 };
 
-// Actualizar un usuario (por ahora, solo el límite de proyectos)
+// Actualizar un usuario
 export const updateUser = async (req, res) => {
     const { id } = req.params;
     const { project_limit } = req.body;
