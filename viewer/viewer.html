@@ -5,37 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- 1. Importamos el componente <model-viewer> de Google -->
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
-
+    <!-- Scripts que se cargarán dinámicamente según el tipo de contenido -->
+    
     <style>
         body { 
             margin: 0; 
             overflow: hidden; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #f0f0f0;
         }
-        model-viewer {
-            width: 100%;
-            height: 100%;
-            --ar-button-display: none; /* Ocultamos el botón de AR por defecto */
-        }
-        .loader-overlay {
+        .overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            background-color: rgba(255, 255, 255, 0.8);
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
             z-index: 2;
         }
+        .overlay p {
+            font-size: 1.2rem;
+            max-width: 80%;
+            margin: 10px 0;
+        }
+        .overlay button {
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #007aff;
+            background-color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .overlay.hidden {
+            display: none;
+        }
         .spinner {
-            border: 5px solid #e0e0e0;
-            border-top: 5px solid #007aff;
+            border: 5px solid #444;
+            border-top: 5px solid #fff;
             border-radius: 50%;
             width: 50px;
             height: 50px;
@@ -45,98 +56,147 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        #error-message {
+        model-viewer {
+            width: 100%;
+            height: 100%;
             position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #ff4d4d;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-            z-index: 10;
-            display: none;
+            top: 0;
+            left: 0;
         }
     </style>
 </head>
 <body>
 
-    <div id="loader" class="loader-overlay">
+    <div id="loader" class="overlay">
         <div class="spinner"></div>
+        <p id="loader-text">Cargando proyecto...</p>
     </div>
-    <div id="error-message"></div>
-
-    <!-- 2. Usamos la etiqueta <model-viewer> para mostrar el modelo -->
-    <model-viewer
-        id="ar-viewer"
-        alt="Visualizador de modelo 3D"
-        src=""
-        ar
-        ar-modes="webxr scene-viewer quick-look"
-        camera-controls
-        enable-pan
-        shadow-intensity="1"
-        autoplay
-    >
-        <!-- El botón de AR se genera automáticamente por el componente -->
-    </model-viewer>
+    
+    <div id="ar-container" style="width: 100%; height: 100vh;">
+        <!-- El contenido de RA se inyectará aquí -->
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
-            const viewer = document.getElementById('ar-viewer');
+            const arContainer = document.getElementById('ar-container');
             const loader = document.getElementById('loader');
-            const errorMessage = document.getElementById('error-message');
-
+            const loaderText = document.getElementById('loader-text');
+            
             const showError = (message) => {
-                errorMessage.textContent = message;
-                errorMessage.style.display = 'block';
-                loader.style.display = 'none';
+                loaderText.textContent = `Error: ${message}`;
+                document.querySelector('.spinner').style.display = 'none';
             };
 
-            const initializeViewer = async () => {
+            const loadScript = (src) => {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            };
+
+            const initializeModelViewer = (projectData) => {
+                loadScript('https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js')
+                    .then(() => {
+                        const modelViewer = document.createElement('model-viewer');
+                        modelViewer.id = "ar-viewer";
+                        modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
+                        modelViewer.setAttribute('src', projectData.model_url);
+                        modelViewer.setAttribute('ar', '');
+                        modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
+                        modelViewer.setAttribute('camera-controls', '');
+                        modelViewer.setAttribute('enable-pan', '');
+                        modelViewer.setAttribute('autoplay', '');
+
+                        arContainer.appendChild(modelViewer);
+
+                        modelViewer.addEventListener('load', () => {
+                            loader.classList.add('hidden');
+                        });
+                    })
+                    .catch(() => showError('No se pudo cargar la librería del visor 3D.'));
+            };
+
+            const initializeAframeVideo = (projectData) => {
+                Promise.all([
+                    loadScript('https://aframe.io/releases/1.5.0/aframe.min.js'),
+                    loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js')
+                ]).then(() => {
+                    const scene = document.createElement('a-scene');
+                    scene.setAttribute('vr-mode-ui', 'enabled: false');
+                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+
+                    const assets = document.createElement('a-assets');
+                    const videoAsset = document.createElement('video');
+                    videoAsset.id = 'video-asset';
+                    videoAsset.setAttribute('src', projectData.model_url);
+                    videoAsset.setAttribute('loop', 'true');
+                    videoAsset.setAttribute('crossorigin', 'anonymous');
+                    videoAsset.setAttribute('playsinline', '');
+                    videoAsset.setAttribute('webkit-playsinline', '');
+                    assets.appendChild(videoAsset);
+                    scene.appendChild(assets);
+
+                    const marker = document.createElement('a-marker');
+                    marker.setAttribute('preset', 'hiro'); // Usar Hiro para máxima fiabilidad con video
+                    marker.setAttribute('emitevents', 'true');
+
+                    const videoPlane = document.createElement('a-video');
+                    videoPlane.setAttribute('src', '#video-asset');
+                    videoPlane.setAttribute('width', '1.6');
+                    videoPlane.setAttribute('height', '0.9');
+                    videoPlane.setAttribute('rotation', '-90 0 0');
+                    videoPlane.setAttribute('transparent', 'true');
+                    
+                    marker.appendChild(videoPlane);
+                    scene.appendChild(marker);
+
+                    const camera = document.createElement('a-entity');
+                    camera.setAttribute('camera', '');
+                    scene.appendChild(camera);
+
+                    arContainer.appendChild(scene);
+
+                    scene.addEventListener('loaded', () => {
+                        loader.classList.add('hidden');
+                        const video = document.getElementById('video-asset');
+                         marker.addEventListener('markerFound', () => {
+                            video.play();
+                         });
+                         marker.addEventListener('markerLost', () => {
+                            video.pause();
+                         });
+                    });
+                }).catch(() => showError('No se pudo cargar la librería de RA.'));
+            };
+
+            const initialize = async () => {
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
-
-                    if (!projectId) {
-                        throw new Error("ID de proyecto no encontrado en la URL.");
-                    }
+                    if (!projectId) throw new Error("ID de proyecto no encontrado.");
 
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
-                    if (!response.ok) {
-                        throw new Error(`Proyecto no encontrado (Error ${response.status})`);
-                    }
+                    if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     
                     const projectData = await response.json();
-
-                    if (!projectData.model_url) {
-                        throw new Error("Los datos del proyecto no incluyen una URL de modelo válida.");
+                    
+                    if (projectData.asset_type === 'video') {
+                        initializeAframeVideo(projectData);
+                    } else {
+                        initializeModelViewer(projectData);
                     }
 
-                    // 3. Asignamos dinámicamente la URL del modelo al visor
-                    viewer.src = projectData.model_url;
-
-                    // Escuchamos el evento 'load' para saber cuándo el modelo ha cargado
-                    viewer.addEventListener('load', () => {
-                        console.log('Modelo cargado exitosamente.');
-                        // Ocultamos el loader y mostramos el botón de AR
-                        loader.style.display = 'none';
-                        viewer.shadowRoot.querySelector('.ar-button').style.display = 'block';
-                    });
-
-                    viewer.addEventListener('error', (event) => {
-                        console.error('Error al cargar el modelo:', event.detail);
-                        showError('No se pudo cargar el modelo 3D. Verifique que la URL sea correcta y el archivo sea válido.');
-                    });
-
                 } catch (error) {
-                    console.error("Error al inicializar el visor:", error);
                     showError(error.message);
                 }
             };
 
-            initializeViewer();
+            initialize();
         });
     </script>
 </body>
