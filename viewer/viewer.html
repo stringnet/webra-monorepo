@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- NOTA: Las librerías se cargarán dinámicamente con JavaScript -->
+    <!-- NOTA: Las librerías específicas se cargarán dinámicamente con JavaScript -->
 
     <style>
         body { 
@@ -80,14 +80,19 @@
             
             const showError = (message) => {
                 loaderText.textContent = `Error: ${message}`;
-                document.querySelector('.spinner').style.display = 'none';
+                const spinner = document.querySelector('.spinner');
+                if (spinner) spinner.style.display = 'none';
             };
 
             const loadScript = (src, isModule = false) => {
                 return new Promise((resolve, reject) => {
+                    if (document.querySelector(`script[src="${src}"]`)) {
+                        resolve(); // El script ya está cargado
+                        return;
+                    }
                     const script = document.createElement('script');
                     script.src = src;
-                    if(isModule) script.type = "module";
+                    if (isModule) script.type = "module";
                     script.onload = resolve;
                     script.onerror = reject;
                     document.head.appendChild(script);
@@ -105,13 +110,17 @@
                         modelViewer.setAttribute('camera-controls', '');
                         modelViewer.setAttribute('enable-pan', '');
                         modelViewer.setAttribute('autoplay', '');
+                        modelViewer.setAttribute('crossorigin', 'anonymous');
 
                         arContainer.appendChild(modelViewer);
 
                         modelViewer.addEventListener('load', () => {
                             loader.classList.add('hidden');
                         });
-                        modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
+                        modelViewer.addEventListener('error', (event) => {
+                            console.error('Error al cargar el modelo en <model-viewer>:', event.detail);
+                            showError('No se pudo cargar el modelo 3D.');
+                        });
                     })
                     .catch(() => showError('No se pudo cargar la librería del visor 3D.'));
             };
@@ -129,7 +138,7 @@
                     const assets = document.createElement('a-assets');
                     const videoAsset = document.createElement('video');
                     videoAsset.id = 'video-asset';
-                    videoAsset.setAttribute('src', projectData.model_url);
+                    videoAsset.setAttribute('src', projectData.model_url); // En este caso, model_url contiene la URL del video
                     videoAsset.setAttribute('loop', 'true');
                     videoAsset.setAttribute('crossorigin', 'anonymous');
                     videoAsset.setAttribute('playsinline', '');
@@ -161,8 +170,12 @@
                     scene.addEventListener('loaded', () => {
                         loader.classList.add('hidden');
                         const video = document.getElementById('video-asset');
-                         marker.addEventListener('markerFound', () => video.play());
-                         marker.addEventListener('markerLost', () => video.pause());
+                         marker.addEventListener('markerFound', () => {
+                             video.play();
+                         });
+                         marker.addEventListener('markerLost', () => {
+                             video.pause();
+                         });
                     });
                 }).catch(() => showError('No se pudo cargar la librería de RA.'));
             };
