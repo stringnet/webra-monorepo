@@ -23,7 +23,7 @@ const decodeJwt = (token) => {
     }
 };
 
-// --- API Service ---
+// --- API Service (ACTUALIZADO) ---
 const apiService = {
     getSignature: async (token) => {
         const response = await fetch(`${API_URL}/api/upload/signature`, {
@@ -65,7 +65,33 @@ const apiService = {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
             body: JSON.stringify(projectData)
         });
-        if (!response.ok) throw new Error('Error al crear el proyecto.');
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Error al crear el proyecto');
+        }
+        return response.json();
+    },
+    updateProject: async (token, projectId, projectData) => {
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify(projectData)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Error al actualizar el proyecto');
+        }
+        return response.json();
+    },
+    deleteProject: async (token, projectId) => {
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Error al eliminar el proyecto');
+        }
         return response.json();
     }
 };
@@ -135,64 +161,58 @@ const MarketingIdeasModal = ({ project, onClose }) => {
     // Código del modal de Gemini sin cambios
 };
 
-// --- COMPONENTE MODAL DE CREACIÓN DE PROYECTO (ACTUALIZADO) ---
+// --- COMPONENTE MODAL DE CREACIÓN DE PROYECTO ---
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
-    const [markerType, setMarkerType] = useState('image');
-    
-    const [modelFile, setModelFile] = useState({ file: null, url: null, status: 'idle' }); // idle, uploading, done, error
-    const [markerFile, setMarkerFile] = useState({ file: null, url: null, status: 'idle' });
-
+    const [modelFile, setModelFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
+    const [markerFile, setMarkerFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleFileChange = async (file, fileType) => {
         if (!file) return;
-
         const updateState = fileType === 'model' ? setModelFile : setMarkerFile;
-        updateState({ file: file, url: null, status: 'uploading' });
+        updateState({ file, url: null, public_id: null, status: 'uploading' });
 
         try {
             const token = localStorage.getItem('webar_token');
             const signatureData = await apiService.getSignature(token);
             const uploadResult = await apiService.uploadToCloudinary(file, signatureData);
-            updateState({ file: file, url: uploadResult.secure_url, status: 'done' });
+            updateState({ file, url: uploadResult.secure_url, public_id: uploadResult.public_id, status: 'done' });
         } catch (err) {
-            console.error(`Error al subir ${fileType}:`, err);
-            updateState({ file: file, url: null, status: 'error' });
-            setError(`Error al subir el archivo ${fileType}.`);
+            updateState({ file, url: null, public_id: null, status: 'error' });
+            setError(`Error al subir el archivo.`);
         }
     };
-
+    
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        
         if (modelFile.status !== 'done' || markerFile.status !== 'done') {
             setError('Por favor, espera a que todos los archivos se hayan subido.');
             return;
         }
-
         setLoading(true);
         const projectData = {
-            name: name,
+            name,
             model_url: modelFile.url,
-            marker_type: markerType,
+            marker_type: 'image',
             marker_url: markerFile.url,
+            model_public_id: modelFile.public_id,
+            marker_public_id: markerFile.public_id,
         };
-        
         try {
             const token = localStorage.getItem('webar_token');
             const newProject = await apiService.createProject(token, projectData);
             onProjectCreated(newProject);
             onClose();
         } catch (err) {
-            setError(err.message || "Ocurrió un error desconocido.");
+            setError(err.message);
         } finally {
             setLoading(false);
         }
     };
-
+    
     const FileInput = ({ label, onFileSelect, status, fileName }) => (
         <div>
             <label className="block text-sm font-medium text-gray-700">{label}</label>
@@ -202,16 +222,13 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                     {status === 'uploading' && <LoaderCircle className="mx-auto h-12 w-12 text-blue-500 animate-spin" />}
                     {status === 'done' && <FileCheck2 className="mx-auto h-12 w-12 text-green-500" />}
                     {status === 'error' && <X className="mx-auto h-12 w-12 text-red-500" />}
-                    
                     <div className="flex text-sm text-gray-600">
                         <label htmlFor={label} className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
                             <span>{status === 'done' ? 'Cambiar archivo' : 'Selecciona un archivo'}</span>
                             <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} />
                         </label>
                     </div>
-                     <p className="text-xs text-gray-500">
-                        {status === 'done' ? fileName : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}
-                     </p>
+                     <p className="text-xs text-gray-500">{status === 'done' ? fileName : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}</p>
                 </div>
             </div>
         </div>
@@ -220,19 +237,15 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform transition-all">
-                <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="text-blue-500 mr-2" />Crear Nuevo Proyecto</h2>
-                </div>
+                <div className="p-6 border-b border-gray-200"><h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="text-blue-500 mr-2" />Crear Nuevo Proyecto</h2></div>
                 <form onSubmit={handleSubmit}>
                     <div className="p-6 space-y-4">
                         <div>
                             <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nombre del Proyecto</label>
                             <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required />
                         </div>
-
                         <FileInput label="Modelo 3D" onFileSelect={(file) => handleFileChange(file, 'model')} status={modelFile.status} fileName={modelFile.file?.name} />
                         <FileInput label="Marcador (Imagen)" onFileSelect={(file) => handleFileChange(file, 'marker')} status={markerFile.status} fileName={markerFile.file?.name} />
-                        
                         {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-md">{error}</p>}
                     </div>
                     <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
@@ -247,13 +260,61 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     );
 };
 
+// --- NUEVO COMPONENTE: MODAL DE EDICIÓN ---
+const EditProjectModal = ({ project, onClose, onProjectUpdated }) => {
+    const [name, setName] = useState(project.name);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-// --- VISTAS PRINCIPALES ---
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        try {
+            const token = localStorage.getItem('webar_token');
+            const updatedProject = await apiService.updateProject(token, project.id, { name });
+            onProjectUpdated(updatedProject);
+            onClose();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                <div className="p-6 border-b"><h2 className="text-xl font-bold text-gray-800">Editar Proyecto</h2></div>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-6">
+                        <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700">Nombre del Proyecto</label>
+                        <input type="text" id="edit-name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" required />
+                        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                    </div>
+                    <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</button>
+                        <button type="submit" className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700" disabled={loading}>
+                            {loading ? 'Guardando...' : 'Guardar Cambios'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
+// --- VISTAS PRINCIPALES (ProjectsView ACTUALIZADA) ---
 const DashboardView = ({ user }) => (
     <div>
         <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
         <p className="text-gray-500 mt-1">Aquí tienes un resumen de la actividad de la plataforma.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"><StatCard title="Total de Proyectos" value="3" icon={<FolderKanban className="text-blue-500" />} change="+5" changeType="increase" /><StatCard title="Total de Usuarios" value="12" icon={<Users className="text-blue-500" />} change="+2" changeType="increase" /><StatCard title="Visualizaciones" value="1,287" icon={<Share2 className="text-blue-500" />} change="-10%" changeType="decrease" /></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+            <StatCard title="Total de Proyectos" value="3" icon={<FolderKanban className="text-blue-500" />} change="+5" changeType="increase" />
+            <StatCard title="Total de Usuarios" value="12" icon={<Users className="text-blue-500" />} change="+2" changeType="increase" />
+            <StatCard title="Visualizaciones" value="1,287" icon={<Share2 className="text-blue-500" />} change="-10%" changeType="decrease" />
+        </div>
     </div>
 );
 
@@ -262,12 +323,13 @@ const ProjectsView = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [editingProject, setEditingProject] = useState(null);
 
     const fetchProjects = async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('webar_token');
-            if (!token) throw new Error("No se encontró token.");
+            if (!token) throw new Error("No hay token");
             const data = await apiService.getProjects(token);
             setProjects(data);
         } catch (err) {
@@ -276,23 +338,39 @@ const ProjectsView = () => {
             setLoading(false);
         }
     };
-
-    useEffect(() => {
-        fetchProjects();
-    }, []);
+    
+    useEffect(() => { fetchProjects(); }, []);
 
     const handleProjectCreated = (newProject) => {
         setProjects(prevProjects => [newProject, ...prevProjects]);
     };
 
+    const handleDelete = async (projectId) => {
+        if (window.confirm('¿Estás seguro de que quieres eliminar este proyecto? Esta acción no se puede deshacer.')) {
+            try {
+                const token = localStorage.getItem('webar_token');
+                await apiService.deleteProject(token, projectId);
+                setProjects(projects.filter(p => p.id !== projectId));
+            } catch (err) {
+                alert(`Error al eliminar: ${err.message}`);
+            }
+        }
+    };
+
+    const handleProjectUpdated = (updatedProject) => {
+        setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+        setEditingProject(null);
+    };
+
     return (
         <div>
             {isCreateModalOpen && <CreateProjectModal onClose={() => setIsCreateModalOpen(false)} onProjectCreated={handleProjectCreated} />}
+            {editingProject && <EditProjectModal project={editingProject} onClose={() => setEditingProject(null)} onProjectUpdated={handleProjectUpdated} />}
+            
             <div className="flex justify-between items-center">
                 <div><h1 className="text-3xl font-bold text-gray-800">Proyectos de Realidad Aumentada</h1><p className="text-gray-500 mt-1">Crea, gestiona y comparte tus experiencias de RA.</p></div>
                 <button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors flex items-center">
-                    <PlusCircle className="mr-2" size={20} />
-                    Crear Nuevo Proyecto
+                    <PlusCircle className="mr-2" size={20} />Crear Nuevo Proyecto
                 </button>
             </div>
             <div className="mt-8 bg-white rounded-xl shadow-md overflow-x-auto">
@@ -315,16 +393,12 @@ const ProjectsView = () => {
                                         <div className="flex items-center justify-center space-x-1">
                                             <button className="text-gray-400 hover:text-yellow-500 p-2 rounded-full transition-colors" title="Asistente de Marketing IA"><Sparkles size={18} /></button>
                                             <button className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors" title="Ver Código QR"><QrCode size={18} /></button>
-                                            <button className="text-gray-400 hover:text-green-600 p-2 rounded-full transition-colors" title="Editar"><Edit size={18} /></button>
-                                            <button className="text-gray-400 hover:text-red-600 p-2 rounded-full transition-colors" title="Eliminar"><Trash2 size={18} /></button>
+                                            <button onClick={() => setEditingProject(project)} className="text-gray-400 hover:text-green-600 p-2 rounded-full transition-colors" title="Editar"><Edit size={18} /></button>
+                                            <button onClick={() => handleDelete(project.id)} className="text-gray-400 hover:text-red-600 p-2 rounded-full transition-colors" title="Eliminar"><Trash2 size={18} /></button>
                                         </div>
                                     </td>
                                 </tr>
-                            )) : (
-                                <tr>
-                                    <td colSpan="4" className="text-center p-8 text-gray-500">No tienes proyectos todavía. ¡Crea el primero!</td>
-                                </tr>
-                            )}
+                            )) : ( <tr><td colSpan="4" className="text-center p-8 text-gray-500">No tienes proyectos todavía. ¡Crea el primero!</td></tr> )}
                         </tbody>
                     </table>
                 )}
@@ -334,9 +408,11 @@ const ProjectsView = () => {
 };
 
 const UsersView = () => (
-    <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p><div className="mt-8 bg-white rounded-xl shadow-md p-10 text-center"><p className="text-gray-600">La funcionalidad de gestión de usuarios se implementará aquí.</p></div></div>
+    <div>
+        <h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1>
+        <p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p>
+    </div>
 );
-
 
 const LoginPage = ({ onLogin }) => {
     const [email, setEmail] = useState('');
@@ -346,16 +422,16 @@ const LoginPage = ({ onLogin }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
         setLoading(true);
+        setError('');
         try {
             const response = await fetch(`${API_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email, password })
             });
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Error al iniciar sesión.');
+            if (!response.ok) throw new Error(data.message);
             onLogin(data.token);
         } catch (err) {
             setError(err.message);
@@ -366,7 +442,7 @@ const LoginPage = ({ onLogin }) => {
 
     return (
         <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4">
-             <div className="absolute top-0 left-0 w-full h-full bg-cover bg-center opacity-10" style={{backgroundImage: "url('https://www.transparenttextures.com/patterns/cubes.png')"}}></div>
+            <div className="absolute top-0 left-0 w-full h-full bg-cover bg-center opacity-10" style={{backgroundImage: "url('https://www.transparenttextures.com/patterns/cubes.png')"}}></div>
             <div className="w-full max-w-md z-10">
                 <div className="text-center mb-8"><div className="inline-flex items-center space-x-3"><div className="bg-blue-600 p-3 rounded-xl"><Share2 className="w-8 h-8 text-white" /></div><h1 className="text-4xl font-bold text-white">WebRA</h1></div><p className="text-gray-400 mt-2">Plataforma de Creación de Realidad Aumentada</p></div>
                 <div className="bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
@@ -388,11 +464,10 @@ const LoginPage = ({ onLogin }) => {
     );
 };
 
-
 const DashboardPage = ({ user, onLogout }) => {
     const [activeView, setActiveView] = useState('dashboard');
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    
+
     const renderView = () => {
         switch (activeView) {
             case 'dashboard': return <DashboardView user={user} />;
@@ -401,6 +476,7 @@ const DashboardPage = ({ user, onLogout }) => {
             default: return <DashboardView user={user} />;
         }
     };
+
     const handleNavigate = (view) => {
         setActiveView(view);
         if (window.innerWidth < 768) {
@@ -419,8 +495,6 @@ const DashboardPage = ({ user, onLogout }) => {
     );
 };
 
-
-// --- COMPONENTE PRINCIPAL DE LA APLICACIÓN ---
 export default function App() {
     const [user, setUser] = useState(null);
     const [authReady, setAuthReady] = useState(false);
@@ -460,4 +534,4 @@ export default function App() {
     }
 
     return <DashboardPage user={user} onLogout={handleLogout} />;
-}
+};
