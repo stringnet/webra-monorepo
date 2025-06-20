@@ -4,8 +4,6 @@ import { Users, LayoutDashboard, FolderKanban, LogOut, Menu, X, Share2, QrCode, 
 // =================================================================================
 // ¡ACCIÓN REQUERIDA! REEMPLAZA ESTE VALOR
 // =================================================================================
-// Pega aquí únicamente el "Cloud Name" de tu cuenta de Cloudinary.
-// Esta clave es pública y segura de tener aquí.
 const CLOUDINARY_CLOUD_NAME = 'ditgncrxp'; 
 // =================================================================================
 
@@ -18,38 +16,12 @@ const decodeJwt = (token) => {
     try {
         return JSON.parse(atob(token.split('.')[1]));
     } catch (e) {
-        console.error("Error decoding JWT", e);
         return null;
     }
 };
 
 // --- API Service (ACTUALIZADO) ---
 const apiService = {
-    getSignature: async (token) => {
-        const response = await fetch(`${API_URL}/api/upload/signature`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) throw new Error('No se pudo obtener la firma para la subida.');
-        return response.json();
-    },
-    uploadToCloudinary: async (file, signatureData) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('api_key', signatureData.api_key); 
-        formData.append('timestamp', signatureData.timestamp);
-        formData.append('signature', signatureData.signature);
-
-        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            console.error("Cloudinary upload failed response:", await response.text());
-            throw new Error('La subida a Cloudinary falló.');
-        }
-        return response.json();
-    },
     getProjects: async (token) => {
         const response = await fetch(`${API_URL}/api/projects`, {
             method: 'GET',
@@ -64,10 +36,7 @@ const apiService = {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
             body: JSON.stringify(projectData)
         });
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.message || 'Error al crear el proyecto.');
-        }
+        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     updateProject: async (token, projectId, projectData) => {
@@ -76,10 +45,7 @@ const apiService = {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
             body: JSON.stringify(projectData)
         });
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.message || 'Error al actualizar el proyecto.');
-        }
+        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     deleteProject: async (token, projectId) => {
@@ -87,12 +53,25 @@ const apiService = {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.message || 'Error al eliminar el proyecto.');
-        }
+        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
+    getSignature: async (token) => {
+        const response = await fetch(`${API_URL}/api/upload/signature`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) throw new Error('No se pudo obtener la firma para la subida.');
+        return response.json();
+    },
+    uploadToCloudinary: async (file, signatureData) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', signatureData.api_key); 
+        formData.append('timestamp', signatureData.timestamp);
+        formData.append('signature', signatureData.signature);
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, { method: 'POST', body: formData });
+        if (!response.ok) throw new Error('La subida a Cloudinary falló.');
+        return response.json();
+    },
+    
     // --- NUEVAS FUNCIONES PARA USUARIOS ---
     getUsers: async (token) => {
         const response = await fetch(`${API_URL}/api/users`, {
@@ -131,7 +110,7 @@ const apiService = {
 
 
 // --- COMPONENTES DE LA UI ---
-const SidebarHeader = () => (
+const SidebarHeader = ({ user }) => (
     <div className="p-4 pb-2 flex justify-between items-center">
         <div className="flex items-center space-x-3">
             <div className="bg-blue-600 p-2 rounded-lg"><Share2 className="w-6 h-6 text-white" /></div>
@@ -164,7 +143,7 @@ const UserProfile = ({ user, onLogout }) => (
 const Sidebar = ({ user, onLogout, onNavigate, activeView, isOpen, setIsOpen }) => (
     <>
         <aside className={`fixed inset-y-0 left-0 bg-gray-800 shadow-xl z-40 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-in-out w-64 flex-shrink-0 flex flex-col`}>
-            <SidebarHeader />
+            <SidebarHeader user={user} />
             <nav className="mt-6 flex-grow">
                 <ul>
                     <SidebarItem icon={<LayoutDashboard size={20} />} text="Dashboard" active={activeView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
@@ -190,9 +169,7 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
         <div className="bg-blue-100 p-4 rounded-full">{icon}</div>
     </div>
 );
-const MarketingIdeasModal = ({ project, onClose }) => {
-    // Código del modal de Gemini sin cambios
-};
+const MarketingIdeasModal = ({ project, onClose }) => { /* ... */ };
 const QRCodeModal = ({ url, onClose }) => {
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
     return (
@@ -373,7 +350,7 @@ const CreateUserModal = ({ onClose, onUserCreated }) => {
         setLoading(true);
         try {
             const token = localStorage.getItem('webar_token');
-            const newUser = await apiService.createUser(token, { name, email, password, project_limit: projectLimit });
+            const newUser = await apiService.createUser(token, { name, email, password, project_limit: Number(projectLimit) });
             onUserCreated(newUser);
             onClose();
         } catch (err) {
@@ -418,6 +395,51 @@ const CreateUserModal = ({ onClose, onUserCreated }) => {
         </div>
     );
 };
+
+
+const EditUserModal = ({ user, onClose, onUserUpdated }) => {
+    const [projectLimit, setProjectLimit] = useState(user.project_limit);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        try {
+            const token = localStorage.getItem('webar_token');
+            const updatedUser = await apiService.updateUser(token, user.id, { project_limit: Number(projectLimit) });
+            onUserUpdated(updatedUser);
+            onClose();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    return (
+         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                <div className="p-6 border-b"><h2 className="text-xl font-bold text-gray-800">Editar Usuario: {user.name}</h2></div>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-6">
+                        <label htmlFor="limit" className="block text-sm font-medium text-gray-700">Límite de Proyectos</label>
+                        <input type="number" id="limit" value={projectLimit} onChange={(e) => setProjectLimit(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                    </div>
+                    <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md">Cancelar</button>
+                        <button type="submit" className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg" disabled={loading}>
+                            {loading ? 'Guardando...' : 'Guardar Cambios'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 
 // --- VISTAS PRINCIPALES ---
 const DashboardView = ({ user }) => (
@@ -527,6 +549,7 @@ const UsersView = ({user}) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState(null);
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -542,10 +565,8 @@ const UsersView = ({user}) => {
     };
 
     useEffect(() => {
-        if(user && user.role === 'admin') {
-            fetchUsers();
-        }
-    }, [user]);
+        fetchUsers();
+    }, []);
     
     const handleUserCreated = (newUser) => {
         setUsers(prevUsers => [newUser, ...prevUsers]);
@@ -562,10 +583,16 @@ const UsersView = ({user}) => {
             }
         }
     };
+    
+    const handleUserUpdated = (updatedUser) => {
+        setUsers(users.map(u => (u.id === updatedUser.id ? { ...u, project_limit: updatedUser.project_limit } : u)));
+        setEditingUser(null);
+    };
 
     return (
         <div>
             {isCreateModalOpen && <CreateUserModal onClose={() => setIsCreateModalOpen(false)} onUserCreated={handleUserCreated} />}
+            {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onUserUpdated={handleUserUpdated} />}
             <div className="flex justify-between items-center">
                 <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p></div>
                 <button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 flex items-center">
@@ -594,7 +621,7 @@ const UsersView = ({user}) => {
                                     <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{user.project_limit}</td>
                                     <td className="px-6 py-4 text-center">
-                                        <button onClick={() => alert('Función de editar no implementada')} className="p-2 text-gray-400 hover:text-green-600"><Edit size={18} /></button>
+                                        <button onClick={() => setEditingUser(user)} className="p-2 text-gray-400 hover:text-green-600"><Edit size={18} /></button>
                                         <button onClick={() => handleUserDeleted(user.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
                                     </td>
                                 </tr>
