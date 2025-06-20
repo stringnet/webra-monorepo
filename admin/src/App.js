@@ -38,7 +38,6 @@ const apiService = {
         formData.append('api_key', signatureData.api_key); 
         formData.append('timestamp', signatureData.timestamp);
         formData.append('signature', signatureData.signature);
-        formData.append('upload_preset', 'ml_default'); // Usar un preset si es necesario
 
         const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, {
             method: 'POST',
@@ -67,7 +66,7 @@ const apiService = {
         });
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.message || 'Error al crear el proyecto');
+            throw new Error(err.message || 'Error al crear el proyecto.');
         }
         return response.json();
     },
@@ -79,7 +78,7 @@ const apiService = {
         });
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.message || 'Error al actualizar el proyecto');
+            throw new Error(err.message || 'Error al actualizar el proyecto.');
         }
         return response.json();
     },
@@ -90,15 +89,49 @@ const apiService = {
         });
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.message || 'Error al eliminar el proyecto');
+            throw new Error(err.message || 'Error al eliminar el proyecto.');
         }
+        return response.json();
+    },
+    // --- NUEVAS FUNCIONES PARA USUARIOS ---
+    getUsers: async (token) => {
+        const response = await fetch(`${API_URL}/api/users`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Error al obtener los usuarios.');
+        return response.json();
+    },
+    createUser: async (token, userData) => {
+        const response = await fetch(`${API_URL}/api/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify(userData)
+        });
+        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
+        return response.json();
+    },
+    updateUser: async (token, userId, userData) => {
+        const response = await fetch(`${API_URL}/api/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify(userData)
+        });
+        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
+        return response.json();
+    },
+    deleteUser: async (token, userId) => {
+        const response = await fetch(`${API_URL}/api/users/${userId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     }
 };
 
 
 // --- COMPONENTES DE LA UI ---
-const SidebarHeader = ({ user }) => (
+const SidebarHeader = () => (
     <div className="p-4 pb-2 flex justify-between items-center">
         <div className="flex items-center space-x-3">
             <div className="bg-blue-600 p-2 rounded-lg"><Share2 className="w-6 h-6 text-white" /></div>
@@ -131,7 +164,7 @@ const UserProfile = ({ user, onLogout }) => (
 const Sidebar = ({ user, onLogout, onNavigate, activeView, isOpen, setIsOpen }) => (
     <>
         <aside className={`fixed inset-y-0 left-0 bg-gray-800 shadow-xl z-40 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-300 ease-in-out w-64 flex-shrink-0 flex flex-col`}>
-            <SidebarHeader user={user} />
+            <SidebarHeader />
             <nav className="mt-6 flex-grow">
                 <ul>
                     <SidebarItem icon={<LayoutDashboard size={20} />} text="Dashboard" active={activeView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
@@ -157,9 +190,9 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
         <div className="bg-blue-100 p-4 rounded-full">{icon}</div>
     </div>
 );
-const MarketingIdeasModal = ({ project, onClose }) => { /* ... */ };
-
-// --- NUEVO COMPONENTE: MODAL PARA MOSTRAR QR ---
+const MarketingIdeasModal = ({ project, onClose }) => {
+    // Código del modal de Gemini sin cambios
+};
 const QRCodeModal = ({ url, onClose }) => {
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
     return (
@@ -173,15 +206,31 @@ const QRCodeModal = ({ url, onClose }) => {
         </div>
     );
 };
-
-// --- COMPONENTE MODAL DE CREACIÓN DE PROYECTO (ACTUALIZADO) ---
+const FileInput = ({ label, onFileSelect, status, fileName }) => (
+    <div>
+        <label className="block text-sm font-medium text-gray-700">{label}</label>
+        <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 ${status === 'error' ? 'border-red-400' : 'border-gray-300'} border-dashed rounded-md`}>
+            <div className="space-y-1 text-center">
+                {status === 'idle' && <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />}
+                {status === 'uploading' && <LoaderCircle className="mx-auto h-12 w-12 text-blue-500 animate-spin" />}
+                {status === 'done' && <FileCheck2 className="mx-auto h-12 w-12 text-green-500" />}
+                {status === 'error' && <X className="mx-auto h-12 w-12 text-red-500" />}
+                <div className="flex text-sm text-gray-600">
+                    <label htmlFor={label} className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                        <span>{status === 'done' ? 'Cambiar archivo' : 'Selecciona un archivo'}</span>
+                        <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} />
+                    </label>
+                </div>
+                 <p className="text-xs text-gray-500">{status === 'done' ? fileName : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}</p>
+            </div>
+        </div>
+    </div>
+);
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
     const [markerType, setMarkerType] = useState('image');
-    
     const [modelFile, setModelFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [markerFile, setMarkerFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
-
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -204,13 +253,11 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-
         const isMarkerRequired = markerType === 'image';
         if (modelFile.status !== 'done' || (isMarkerRequired && markerFile.status !== 'done')) {
             setError('Por favor, sube todos los archivos requeridos.');
             return;
         }
-
         setLoading(true);
         const projectData = {
             name,
@@ -232,31 +279,10 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         }
     };
     
-    const FileInput = ({ label, onFileSelect, status, fileName }) => (
-        <div>
-            <label className="block text-sm font-medium text-gray-700">{label}</label>
-            <div className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 ${status === 'error' ? 'border-red-400' : 'border-gray-300'} border-dashed rounded-md`}>
-                <div className="space-y-1 text-center">
-                    {status === 'idle' && <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />}
-                    {status === 'uploading' && <LoaderCircle className="mx-auto h-12 w-12 text-blue-500 animate-spin" />}
-                    {status === 'done' && <FileCheck2 className="mx-auto h-12 w-12 text-green-500" />}
-                    {status === 'error' && <X className="mx-auto h-12 w-12 text-red-500" />}
-                    <div className="flex text-sm text-gray-600">
-                        <label htmlFor={label} className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                            <span>{status === 'done' ? 'Cambiar archivo' : 'Selecciona un archivo'}</span>
-                            <input id={label} name={label} type="file" className="sr-only" onChange={(e) => onFileSelect(e.target.files[0])} />
-                        </label>
-                    </div>
-                     <p className="text-xs text-gray-500">{status === 'done' ? fileName : 'FBX, GLB, GLTF, OBJ, WEBM, PNG, JPG'}</p>
-                </div>
-            </div>
-        </div>
-    );
-
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform transition-all">
-                <div className="p-6 border-b border-gray-200"><h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="mr-2" />Crear Nuevo Proyecto</h2></div>
+                <div className="p-6 border-b"><h2 className="text-xl font-bold text-gray-800 flex items-center"><PlusCircle className="mr-2" />Crear Nuevo Proyecto</h2></div>
                 <form onSubmit={handleSubmit}>
                     <div className="p-6 space-y-4">
                         <div>
@@ -289,7 +315,6 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
 };
 
 
-// --- NUEVO COMPONENTE: MODAL DE EDICIÓN ---
 const EditProjectModal = ({ project, onClose, onProjectUpdated }) => {
     const [name, setName] = useState(project.name);
     const [loading, setLoading] = useState(false);
@@ -334,7 +359,67 @@ const EditProjectModal = ({ project, onClose, onProjectUpdated }) => {
 };
 
 
-// --- VISTAS PRINCIPALES (ProjectsView ACTUALIZADA) ---
+const CreateUserModal = ({ onClose, onUserCreated }) => {
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [projectLimit, setProjectLimit] = useState(5);
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('webar_token');
+            const newUser = await apiService.createUser(token, { name, email, password, project_limit: projectLimit });
+            onUserCreated(newUser);
+            onClose();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                <div className="p-6 border-b"><h2 className="text-xl font-bold text-gray-800">Crear Nuevo Usuario</h2></div>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
+                            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                         <div>
+                            <label className="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                         <div>
+                            <label className="block text-sm font-medium text-gray-700">Contraseña Temporal</label>
+                            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Límite de Proyectos</label>
+                            <input type="number" value={projectLimit} onChange={(e) => setProjectLimit(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                    </div>
+                    <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancelar</button>
+                        <button type="submit" className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg" disabled={loading}>
+                            {loading ? 'Creando...' : 'Crear Usuario'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// --- VISTAS PRINCIPALES ---
 const DashboardView = ({ user }) => (
     <div>
         <h1 className="text-3xl font-bold text-gray-800">Bienvenido, {user.name.split(' ')[0]}</h1>
@@ -347,13 +432,13 @@ const DashboardView = ({ user }) => (
     </div>
 );
 
-const ProjectsView = () => {
+const ProjectsView = ({user}) => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
-    const [qrCodeUrl, setQrCodeUrl] = useState(null); // Estado para el modal de QR
+    const [qrCodeUrl, setQrCodeUrl] = useState(null);
 
     const fetchProjects = async () => {
         setLoading(true);
@@ -400,7 +485,7 @@ const ProjectsView = () => {
             
             <div className="flex justify-between items-center">
                 <div><h1 className="text-3xl font-bold text-gray-800">Proyectos de Realidad Aumentada</h1><p className="text-gray-500 mt-1">Crea, gestiona y comparte tus experiencias de RA.</p></div>
-                <button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors flex items-center">
+                <button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 flex items-center">
                     <PlusCircle className="mr-2" size={20} />Crear Nuevo Proyecto
                 </button>
             </div>
@@ -416,7 +501,7 @@ const ProjectsView = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {projects.length > 0 ? projects.map(project => (
-                                <tr key={project.id} className="hover:bg-gray-50">
+                                <tr key={project.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{project.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${project.marker_type === 'image' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>{project.marker_type}</span></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500 hover:underline"><a href={project.view_url} target="_blank" rel="noopener noreferrer">{project.view_url}</a></td>
@@ -437,12 +522,92 @@ const ProjectsView = () => {
     );
 };
 
-const UsersView = () => (
-    <div>
-        <h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1>
-        <p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p>
-    </div>
-);
+const UsersView = ({user}) => {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+    const fetchUsers = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('webar_token');
+            const data = await apiService.getUsers(token);
+            setUsers(data);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if(user && user.role === 'admin') {
+            fetchUsers();
+        }
+    }, [user]);
+    
+    const handleUserCreated = (newUser) => {
+        setUsers(prevUsers => [newUser, ...prevUsers]);
+    };
+    
+    const handleUserDeleted = async (userId) => {
+        if(window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) {
+            try {
+                const token = localStorage.getItem('webar_token');
+                await apiService.deleteUser(token, userId);
+                setUsers(users.filter(u => u.id !== userId));
+            } catch (err) {
+                alert(`Error al eliminar: ${err.message}`);
+            }
+        }
+    };
+
+    return (
+        <div>
+            {isCreateModalOpen && <CreateUserModal onClose={() => setIsCreateModalOpen(false)} onUserCreated={handleUserCreated} />}
+            <div className="flex justify-between items-center">
+                <div><h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios</h1><p className="text-gray-500 mt-1">Crea y administra los usuarios de la plataforma.</p></div>
+                <button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 flex items-center">
+                    <PlusCircle className="mr-2" size={20} />Crear Nuevo Usuario
+                </button>
+            </div>
+            <div className="mt-8 bg-white rounded-xl shadow-md overflow-x-auto">
+                 {loading ? (
+                    <div className="p-10 text-center">Cargando usuarios...</div>
+                ) : error ? (
+                    <div className="p-10 text-center text-red-500">Error: {error}</div>
+                ) : (
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Límite Proyectos</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {users.length > 0 ? users.map(user => (
+                                <tr key={user.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">{user.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{user.project_limit}</td>
+                                    <td className="px-6 py-4 text-center">
+                                        <button onClick={() => alert('Función de editar no implementada')} className="p-2 text-gray-400 hover:text-green-600"><Edit size={18} /></button>
+                                        <button onClick={() => handleUserDeleted(user.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr><td colSpan="4" className="text-center p-8 text-gray-500">No hay usuarios creados.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+};
 
 const LoginPage = ({ onLogin }) => {
     const [email, setEmail] = useState('');
@@ -501,8 +666,8 @@ const DashboardPage = ({ user, onLogout }) => {
     const renderView = () => {
         switch (activeView) {
             case 'dashboard': return <DashboardView user={user} />;
-            case 'projects': return <ProjectsView />;
-            case 'users': return <UsersView />;
+            case 'projects': return <ProjectsView user={user} />;
+            case 'users': return <UsersView user={user} />;
             default: return <DashboardView user={user} />;
         }
     };
