@@ -1,6 +1,6 @@
 import pool from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary } from 'cloudinary'; // Importar Cloudinary
 
 // Obtener todos los proyectos del usuario autenticado
 export const getProjects = async (req, res) => {
@@ -17,11 +17,15 @@ export const getProjects = async (req, res) => {
 
 // Crear un nuevo proyecto
 export const createProject = async (req, res) => {
+    // Ahora recibimos los public_id desde el frontend
     const { name, model_url, marker_type, marker_url, model_public_id, marker_public_id } = req.body;
     const userId = req.user.id;
 
-    if (!name || !model_url || !marker_url) {
-        return res.status(400).json({ message: 'Todos los campos son requeridos.' });
+    if (marker_type === 'image' && !marker_url) {
+        return res.status(400).json({ message: 'Para marcadores de tipo imagen, la URL del marcador es requerida.' });
+    }
+    if (!name || !model_url || !marker_type) {
+        return res.status(400).json({ message: 'Nombre, modelo y tipo de marcador son requeridos.' });
     }
 
     try {
