@@ -27,9 +27,11 @@ const initializeDatabase = async () => {
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 name VARCHAR(150) NOT NULL,
                 model_url VARCHAR(255) NOT NULL,
+                model_public_id VARCHAR(255),
                 video_url VARCHAR(255),
                 marker_type VARCHAR(50) NOT NULL,
                 marker_url VARCHAR(255) NOT NULL,
+                marker_public_id VARCHAR(255),
                 view_url VARCHAR(255) UNIQUE NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             );

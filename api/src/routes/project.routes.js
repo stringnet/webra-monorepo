@@ -12,5 +12,9 @@ router.get('/', getProjects);
 // @route   POST /api/projects
 // @desc    Crear un nuevo proyecto
 router.post('/', createProject);
+//Actualizar projectos
+router.put('/:id', updateProject); // <-- NUEVA RUTA
+//Borrar Proyectos
+router.delete('/:id', deleteProject); // <-- NUEVA RUTA
 
 export default router;
