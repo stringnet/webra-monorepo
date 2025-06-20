@@ -6,8 +6,10 @@ import authRoutes from './src/routes/auth.routes.js';
 import projectRoutes from './src/routes/project.routes.js';
 import uploadRoutes from './src/routes/upload.routes.js';
 import publicRoutes from './src/routes/public.routes.js';
+import userRoutes from './src/routes/user.routes.js'; // <-- Importar
 import authMiddleware from './src/middleware/auth.middleware.js';
 import initializeDatabase from './src/db/init.db.js';
+import adminMiddleware from './src/middleware/admin.middleware.js'; // <-- Importar
 
 let isDbReady = false;
 const app = express();
@@ -41,6 +43,10 @@ app.use('/api/auth', checkDbReadiness, authRoutes);
 // Rutas protegidas (requieren token)
 app.use('/api/projects', checkDbReadiness, authMiddleware, projectRoutes);
 app.use('/api/upload', checkDbReadiness, authMiddleware, uploadRoutes);
+
+// Rutas protegidas solo para administradores
+app.use('/api/users', checkDbReadiness, authMiddleware, adminMiddleware, userRoutes); // <-- NUEVA LÍNEA
+
 
 app.listen(PORT, () => {
     console.log(`Servidor escuchando en el puerto ${PORT}`);
