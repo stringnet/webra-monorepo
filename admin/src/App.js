@@ -20,45 +20,31 @@ const decodeJwt = (token) => {
     }
 };
 
-// --- API Service (ACTUALIZADO) ---
+// --- API Service ---
 const apiService = {
     getProjects: async (token) => {
-        const response = await fetch(`${API_URL}/api/projects`, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await fetch(`${API_URL}/api/projects`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (!response.ok) throw new Error('Error al obtener los proyectos.');
         return response.json();
     },
     createProject: async (token, projectData) => {
-        const response = await fetch(`${API_URL}/api/projects`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-            body: JSON.stringify(projectData)
-        });
+        const response = await fetch(`${API_URL}/api/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`}, body: JSON.stringify(projectData) });
         if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     updateProject: async (token, projectId, projectData) => {
-        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-            body: JSON.stringify(projectData)
-        });
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`}, body: JSON.stringify(projectData) });
         if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     deleteProject: async (token, projectId) => {
-        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     getSignature: async (token) => {
         const response = await fetch(`${API_URL}/api/upload/signature`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!response.ok) throw new Error('No se pudo obtener la firma para la subida.');
+        if (!response.ok) throw new Error('No se pudo obtener la firma.');
         return response.json();
     },
     uploadToCloudinary: async (file, signatureData) => {
@@ -71,38 +57,23 @@ const apiService = {
         if (!response.ok) throw new Error('La subida a Cloudinary falló.');
         return response.json();
     },
-    
-    // --- NUEVAS FUNCIONES PARA USUARIOS ---
     getUsers: async (token) => {
-        const response = await fetch(`${API_URL}/api/users`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await fetch(`${API_URL}/api/users`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (!response.ok) throw new Error('Error al obtener los usuarios.');
         return response.json();
     },
     createUser: async (token, userData) => {
-        const response = await fetch(`${API_URL}/api/users`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-            body: JSON.stringify(userData)
-        });
+        const response = await fetch(`${API_URL}/api/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`}, body: JSON.stringify(userData) });
         if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     updateUser: async (token, userId, userData) => {
-        const response = await fetch(`${API_URL}/api/users/${userId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-            body: JSON.stringify(userData)
-        });
+        const response = await fetch(`${API_URL}/api/users/${userId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`}, body: JSON.stringify(userData) });
         if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     },
     deleteUser: async (token, userId) => {
-        const response = await fetch(`${API_URL}/api/users/${userId}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await fetch(`${API_URL}/api/users/${userId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
         return response.json();
     }
