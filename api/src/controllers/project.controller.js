@@ -30,14 +30,23 @@ export const createProject = async (req, res) => {
 
     try {
         // --- VERIFICACIÓN DE LÍMITE DE PROYECTOS (NUEVA LÓGICA) ---
-        const projectCountResult = await pool.query('SELECT COUNT(*) FROM ar_projects WHERE user_id = $1', [userId]);
-        const userLimitResult = await pool.query('SELECT project_limit FROM users WHERE id = $1', [userId]);
+        const userDetailsResult = await pool.query(
+            `SELECT u.project_limit, COUNT(p.id) as project_count 
+             FROM users u 
+             LEFT JOIN ar_projects p ON u.id = p.user_id 
+             WHERE u.id = $1 
+             GROUP BY u.id`,
+            [userId]
+        );
 
-        const projectCount = parseInt(projectCountResult.rows[0].count, 10);
-        const projectLimit = userLimitResult.rows[0].project_limit;
+        if (userDetailsResult.rows.length === 0) {
+             return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
 
-        if (projectCount >= projectLimit) {
-            return res.status(403).json({ message: `Límite de proyectos alcanzado. No puedes crear más de ${projectLimit} proyectos.` });
+        const { project_limit, project_count } = userDetailsResult.rows[0];
+
+        if (parseInt(project_count, 10) >= project_limit) {
+            return res.status(403).json({ message: `Límite de proyectos alcanzado. No puedes crear más de ${project_limit} proyectos.` });
         }
         // --- FIN DE LA NUEVA LÓGICA ---
         const projectId = uuidv4();
