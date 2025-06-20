@@ -29,6 +29,17 @@ export const createProject = async (req, res) => {
     }
 
     try {
+        // --- VERIFICACIÓN DE LÍMITE DE PROYECTOS (NUEVA LÓGICA) ---
+        const projectCountResult = await pool.query('SELECT COUNT(*) FROM ar_projects WHERE user_id = $1', [userId]);
+        const userLimitResult = await pool.query('SELECT project_limit FROM users WHERE id = $1', [userId]);
+
+        const projectCount = parseInt(projectCountResult.rows[0].count, 10);
+        const projectLimit = userLimitResult.rows[0].project_limit;
+
+        if (projectCount >= projectLimit) {
+            return res.status(403).json({ message: `Límite de proyectos alcanzado. No puedes crear más de ${projectLimit} proyectos.` });
+        }
+        // --- FIN DE LA NUEVA LÓGICA ---
         const projectId = uuidv4();
         const view_url = `https://webar.scanmee.io/view/${projectId}`;
 
