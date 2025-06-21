@@ -37,7 +37,8 @@
 
       const showError = msg => {
         loaderText.textContent = `Error: ${msg}`;
-        const spinner = document.querySelector('.spinner'); if (spinner) spinner.style.display = 'none';
+        const spinner = document.querySelector('.spinner');
+        if (spinner) spinner.style.display = 'none';
       };
 
       const initializeAframeVideo = projectData => {
@@ -49,13 +50,11 @@
         const assets = document.createElement('a-assets');
         const video = document.createElement('video');
         video.id = 'vid';
-        ['preload:auto','loop','muted','playsinline','webkit-playsinline','crossorigin:anonymous']
-          .forEach(a => video.setAttribute(...a.split(':')));
-
+        ['preload:auto', 'loop', 'muted', 'playsinline', 'webkit-playsinline', 'crossorigin:anonymous']
+          .forEach(attr => video.setAttribute(...attr.split(':')));
         if (video.canPlayType('video/webm; codecs="vp8, vorbis"')) video.src = projectData.model_url;
         else if (video.canPlayType('video/mp4; codecs="hvc1"')) video.src = projectData.model_url.replace(/\.webm$/, '.mp4');
         else video.src = projectData.model_url;
-
         assets.appendChild(video);
         scene.appendChild(assets);
 
@@ -63,7 +62,9 @@
         if (projectData.marker_type === 'image' && projectData.marker_url) {
           marker.setAttribute('type', 'pattern');
           marker.setAttribute('url', projectData.marker_url);
-        } else marker.setAttribute('preset', 'hiro');
+        } else {
+          marker.setAttribute('preset', 'hiro');
+        }
         marker.setAttribute('emitevents', 'true');
 
         const plane = document.createElement('a-plane');
@@ -73,7 +74,10 @@
         marker.appendChild(plane);
 
         scene.appendChild(marker);
-        scene.appendChild(document.createElement('a-entity').setAttribute('camera', ''));        
+        // Camera
+        const cameraElV = document.createElement('a-entity');
+        cameraElV.setAttribute('camera', '');
+        scene.appendChild(cameraElV);
         arContainer.appendChild(scene);
 
         scene.addEventListener('loaded', () => {
@@ -101,7 +105,9 @@
         if (projectData.marker_type === 'image' && projectData.marker_url) {
           marker.setAttribute('type', 'pattern');
           marker.setAttribute('url', projectData.marker_url);
-        } else marker.setAttribute('preset', 'hiro');
+        } else {
+          marker.setAttribute('preset', 'hiro');
+        }
         marker.setAttribute('emitevents', 'true');
 
         const modelEl = document.createElement('a-entity');
@@ -111,10 +117,15 @@
         marker.appendChild(modelEl);
 
         scene.appendChild(marker);
-        scene.appendChild(document.createElement('a-entity').setAttribute('camera', ''));
+        // Camera
+        const cameraElM = document.createElement('a-entity');
+        cameraElM.setAttribute('camera', '');
+        scene.appendChild(cameraElM);
         arContainer.appendChild(scene);
 
-        scene.addEventListener('loaded', () => loader.classList.add('hidden'));
+        scene.addEventListener('loaded', () => {
+          loader.classList.add('hidden');
+        });
       };
 
       (async () => {
