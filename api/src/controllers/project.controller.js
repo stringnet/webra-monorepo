@@ -1,11 +1,11 @@
+// api/src/controllers/project.controller.js
 import pool from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
-import { v2 as cloudinary } from 'cloudinary'; // Importar Cloudinary
+import { v2 as cloudinary } from 'cloudinary';
 
 // Obtener todos los proyectos del usuario autenticado
 export const getProjects = async (req, res) => {
     try {
-        // El 'req.user.id' viene del middleware de autenticación
         const userId = req.user.id;
         const projects = await pool.query('SELECT * FROM ar_projects WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
         res.status(200).json(projects.rows);
@@ -15,9 +15,8 @@ export const getProjects = async (req, res) => {
     }
 };
 
-// Crear un nuevo proyecto
+// Crear un nuevo proyecto (VERSIÓN CORREGIDA)
 export const createProject = async (req, res) => {
-    // Ahora recibimos los public_id desde el frontend
     const { name, asset_type, model_url, marker_type, marker_url, model_public_id, marker_public_id } = req.body;
     const userId = req.user.id;
 
@@ -29,7 +28,6 @@ export const createProject = async (req, res) => {
     }
 
     try {
-        // --- VERIFICACIÓN DE LÍMITE DE PROYECTOS (NUEVA LÓGICA) ---
         const userDetailsResult = await pool.query(
             `SELECT u.project_limit, COUNT(p.id) as project_count 
              FROM users u 
@@ -48,12 +46,13 @@ export const createProject = async (req, res) => {
         if (parseInt(project_count, 10) >= project_limit) {
             return res.status(403).json({ message: `Límite de proyectos alcanzado. No puedes crear más de ${project_limit} proyectos.` });
         }
-        // --- FIN DE LA NUEVA LÓGICA ---
+
         const projectId = uuidv4();
         const view_url = `https://webar.scanmee.io/view/${projectId}`;
 
+        // CORRECCIÓN: La consulta SQL ahora tiene el número correcto de columnas y valores.
         const newProject = await pool.query(
-            'INSERT INTO ar_projects (id, user_id, name, asset_type, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+            'INSERT INTO ar_projects (id, user_id, name, asset_type, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
             [projectId, userId, name, asset_type || 'model', model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id]
         );
 
@@ -79,7 +78,6 @@ export const updateProject = async (req, res) => {
         if (updatedProject.rows.length === 0) {
             return res.status(404).json({ message: 'Proyecto no encontrado o no tienes permiso para editarlo.' });
         }
-
         res.status(200).json(updatedProject.rows[0]);
     } catch (err) {
         console.error(err.message);
@@ -93,9 +91,8 @@ export const deleteProject = async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // Primero, obtenemos los public_id para poder borrar los archivos de Cloudinary
         const projectData = await pool.query(
-            'SELECT model_public_id, marker_public_id FROM ar_projects WHERE id = $1 AND user_id = $2',
+            'SELECT model_public_id, marker_public_id, asset_type FROM ar_projects WHERE id = $1 AND user_id = $2',
             [id, userId]
         );
 
@@ -103,13 +100,14 @@ export const deleteProject = async (req, res) => {
             return res.status(404).json({ message: 'Proyecto no encontrado o no tienes permiso para eliminarlo.' });
         }
 
-        // Eliminamos el proyecto de la base de datos
         await pool.query('DELETE FROM ar_projects WHERE id = $1 AND user_id = $2', [id, userId]);
 
-        // Eliminamos los archivos de Cloudinary
-        const { model_public_id, marker_public_id } = projectData.rows[0];
+        const { model_public_id, marker_public_id, asset_type } = projectData.rows[0];
+
+        // Especificar resource_type al eliminar de Cloudinary
+        const resource_type = asset_type === 'video' ? 'video' : 'raw';
         if (model_public_id) {
-            await cloudinary.uploader.destroy(model_public_id, { resource_type: 'raw' });
+            await cloudinary.uploader.destroy(model_public_id, { resource_type });
         }
         if (marker_public_id) {
             await cloudinary.uploader.destroy(marker_public_id);
@@ -121,3 +119,4 @@ export const deleteProject = async (req, res) => {
         res.status(500).send('Error del servidor');
     }
 };
+
