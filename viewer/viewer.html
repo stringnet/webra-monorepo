@@ -4,20 +4,60 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
+    
+    <!-- NOTA: Las librerías se cargarán dinámicamente con JavaScript -->
+
     <style>
-        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
-        .container { position: relative; width: 100vw; height: 100vh; }
-        .overlay {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
-            background-color: rgba(0, 0, 0, 0.8); color: white; z-index: 2;
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
         }
-        .overlay p { font-size: 1.2rem; max-width: 80%; margin: 10px 0; }
-        .overlay.hidden { display: none; }
-        .spinner { border: 5px solid #444; border-top: 5px solid #fff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        model-viewer { width: 100%; height: 100%; }
-        #ar-scene { width: 100%; height: 100%; }
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 2;
+        }
+        .overlay p {
+            font-size: 1.2rem;
+            max-width: 80%;
+            margin: 10px 0;
+        }
+        .overlay.hidden {
+            display: none;
+        }
+        .spinner {
+            border: 5px solid #444;
+            border-top: 5px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        model-viewer {
+            width: 100%;
+            height: 100%;
+        }
+        #ar-scene {
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
@@ -27,7 +67,9 @@
         <p id="loader-text">Cargando proyecto...</p>
     </div>
     
-    <div id="ar-container" class="container"></div>
+    <div id="ar-container" class="container">
+        <!-- El contenido de RA se inyectará aquí -->
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -44,7 +86,9 @@
 
             const loadScript = (src, isModule = false) => {
                 return new Promise((resolve, reject) => {
-                    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+                    if (document.querySelector(`script[src="${src}"]`)) {
+                        resolve(); return;
+                    }
                     const script = document.createElement('script');
                     script.src = src;
                     if (isModule) script.type = "module";
@@ -54,11 +98,9 @@
                 });
             };
 
-            // ----------- 3D MODEL VIEWER -----------
             const initializeModelViewer = (projectData) => {
                 loadScript('https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js', true)
                     .then(() => {
-                        arContainer.innerHTML = "";
                         const modelViewer = document.createElement('model-viewer');
                         modelViewer.setAttribute('src', projectData.model_url);
                         modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
@@ -77,21 +119,19 @@
                     .catch((err) => showError(err.message));
             };
 
-            // ----------- VIDEO CHROMA (AFRAME) -----------
             const initializeAframeVideo = (projectData) => {
+                // CORRECCIÓN: Cargar scripts en secuencia para evitar errores de tiempo.
                 loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
                 .then(() => loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'))
                 .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
                 .then(() => {
-                    arContainer.innerHTML = "";
-
+                    // Ahora que todas las librerías están cargadas en orden, construimos la escena.
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                     scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
                     const assets = document.createElement('a-assets');
-                    assets.setAttribute('timeout', '10000');
                     const videoAsset = document.createElement('video');
                     videoAsset.id = 'video-asset';
                     videoAsset.setAttribute('src', projectData.model_url);
@@ -104,27 +144,22 @@
                     assets.appendChild(videoAsset);
                     scene.appendChild(assets);
 
-                    videoAsset.addEventListener('loadeddata', () => { videoAsset.play().catch(()=>{}); });
-
                     const marker = document.createElement('a-marker');
+                    
                     if(projectData.marker_type === 'image' && projectData.marker_url) {
                         marker.setAttribute('type', 'pattern');
                         marker.setAttribute('url', projectData.marker_url);
                     } else {
-                        marker.setAttribute('preset', 'hiro');
+                        marker.setAttribute('preset', 'hiro'); 
                     }
                     marker.setAttribute('emitevents', 'true');
 
-                    // <--- La clave está AQUÍ --->
                     const videoPlane = document.createElement('a-plane');
-                    videoPlane.setAttribute('shader', 'transparent-video');
-                    videoPlane.setAttribute('src', '#video-asset');
-                    videoPlane.setAttribute('color', '0,1,0'); // Cambia a tu color de fondo (ej. azul 0,0,1)
-                    videoPlane.setAttribute('threshold', '0.3'); // Ajusta según necesidad
+                    videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
                     videoPlane.setAttribute('rotation', '-90 0 0');
-
+                    
                     marker.appendChild(videoPlane);
                     scene.appendChild(marker);
                     scene.appendChild(document.createElement('a-camera'));
@@ -133,14 +168,13 @@
                     scene.addEventListener('loaded', () => {
                         loader.classList.add('hidden');
                         const video = document.getElementById('video-asset');
-                        video.play().catch(()=>{});
+                        video.play().catch(() => {});
                         marker.addEventListener('markerFound', () => video.play());
                         marker.addEventListener('markerLost', () => video.pause());
                     });
                 }).catch((err) => showError(err.message));
             };
 
-            // ----------- LOGICA PRINCIPAL -----------
             const initialize = async () => {
                 try {
                     const pathParts = window.location.pathname.split('/');
@@ -151,7 +185,7 @@
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     
                     const projectData = await response.json();
-
+                    
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
                     } else { // 'model' es el default
