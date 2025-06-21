@@ -2,22 +2,14 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Visualizador de RA - WebRA</title>
   <style>
     body { margin: 0; overflow: hidden; }
     .container { position: relative; width: 100vw; height: 100vh; }
-    .overlay { position: absolute; inset: 0; display: flex;
-      justify-content: center; align-items: center;
-      background: rgba(0,0,0,0.8); color: #fff; z-index: 2; }
+    .overlay { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.8); color: #fff; z-index: 2; }
     .overlay.hidden { display: none; }
-    .spinner {
-      border: 5px solid #444;
-      border-top: 5px solid #fff;
-      border-radius: 50%;
-      width: 50px; height: 50px;
-      animation: spin 1s linear infinite;
-    }
+    .spinner { border: 5px solid #444; border-top: 5px solid #fff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #ar-container { width: 100%; height: 100%; }
   </style>
@@ -27,8 +19,12 @@
     <div class="spinner"></div>
     <p id="loader-text">Cargando proyecto...</p>
   </div>
-
   <div id="ar-container" class="container"></div>
+
+  <!-- AR.js + A-Frame + Transparent Video Shader -->
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -54,54 +50,61 @@
       });
 
       const initializeAframeVideo = projectData => {
-        loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
-        .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
-        .then(() => {
-          const scene = document.createElement('a-scene');
-          scene.setAttribute('vr-mode-ui', 'enabled: false');
-          scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; alpha: true;');
+        const scene = document.createElement('a-scene');
+        scene.setAttribute('embedded', '');
+        scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
+        scene.setAttribute('renderer', 'alpha: true; premultipliedAlpha: true; logarithmicDepthBuffer: true');
 
-          const assets = document.createElement('a-assets');
-          const video = document.createElement('video');
-          video.id = 'vid';
-          video.setAttribute('src', projectData.model_url);
-          video.setAttribute('loop', '');
-          video.setAttribute('autoplay', '');
-          video.setAttribute('muted', '');
-          video.setAttribute('crossorigin', 'anonymous');
-          video.setAttribute('playsinline', '');
-          video.setAttribute('webkit-playsinline', '');
-          assets.appendChild(video);
-          scene.appendChild(assets);
+        const assets = document.createElement('a-assets');
+        const video = document.createElement('video');
+        video.id = 'vid';
+        video.setAttribute('preload', 'auto');
+        video.setAttribute('loop', '');
+        video.setAttribute('muted', '');
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        video.setAttribute('crossorigin', 'anonymous');
+        
+        // Selección de formato para transparencia
+        if (video.canPlayType('video/webm; codecs="vp8, vorbis"')) {
+          video.src = projectData.model_url; // WebM con canal alpha
+        } else if (video.canPlayType('video/mp4; codecs="hvc1"')) {
+          video.src = projectData.model_url.replace(/\.webm$/, '.mp4'); // HEVC para Safari iOS
+        } else {
+          video.src = projectData.model_url; // fallback
+        }
 
-          const marker = document.createElement('a-marker');
-          if (projectData.marker_type === 'image' && projectData.marker_url) {
-            marker.setAttribute('type', 'pattern');
-            marker.setAttribute('url', projectData.marker_url);
-          } else {
-            marker.setAttribute('preset', 'hiro');
-          }
-          marker.setAttribute('emitevents', 'true');
+        assets.appendChild(video);
+        scene.appendChild(assets);
 
-          const plane = document.createElement('a-plane');
-          plane.setAttribute('geometry', 'height: 0.9; width: 1.6');
-          plane.setAttribute('rotation', '-90 0 0');
-          plane.setAttribute('material', 'shader: transparent-video; src: #vid; transparent: true');
-          marker.appendChild(plane);
+        const marker = document.createElement('a-marker');
+        if (projectData.marker_type === 'image' && projectData.marker_url) {
+          marker.setAttribute('type', 'pattern');
+          marker.setAttribute('url', projectData.marker_url);
+        } else {
+          marker.setAttribute('preset', 'hiro');
+        }
+        marker.setAttribute('emitevents', 'true');
 
-          scene.appendChild(marker);
-          scene.appendChild(document.createElement('a-camera'));
+        const plane = document.createElement('a-plane');
+        plane.setAttribute('geometry', 'width: 1.6; height: 0.9');
+        plane.setAttribute('rotation', '-90 0 0');
+        plane.setAttribute('material', 'shader: transparent-video; src: #vid; transparent: true; premultipliedAlpha: true');
+        marker.appendChild(plane);
 
-          arContainer.appendChild(scene);
+        scene.appendChild(marker);
+        const cam = document.createElement('a-entity');
+        cam.setAttribute('camera', '');
+        scene.appendChild(cam);
 
-          scene.addEventListener('loaded', () => {
-            loader.classList.add('hidden');
-            video.play().catch(() => {});
-            marker.addEventListener('markerFound', () => video.play());
-            marker.addEventListener('markerLost', () => video.pause());
-          });
-        })
-        .catch(err => showError(err.message));
+        arContainer.appendChild(scene);
+
+        scene.addEventListener('loaded', () => {
+          loader.classList.add('hidden');
+          video.play().catch(() => {});
+          marker.addEventListener('markerFound', () => video.play());
+          marker.addEventListener('markerLost', () => video.pause());
+        });
       };
 
       const initializeModelViewer = projectData => {
@@ -127,7 +130,7 @@
         try {
           const parts = window.location.pathname.split('/');
           const projectId = parts.pop() || parts.pop();
-          if (!projectId) throw new Error("ID de proyecto no encontrado.");
+          if (!projectId) throw new Error('ID de proyecto no encontrado.');
 
           const resp = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
           if (!resp.ok) throw new Error(`Proyecto no encontrado (Error ${resp.status})`);
