@@ -37,18 +37,8 @@
 
       const showError = msg => {
         loaderText.textContent = `Error: ${msg}`;
-        const spinner = document.querySelector('.spinner');
-        if (spinner) spinner.style.display = 'none';
+        const spinner = document.querySelector('.spinner'); if (spinner) spinner.style.display = 'none';
       };
-
-      const loadScript = (src, module = false) => new Promise((res, rej) => {
-        if (document.querySelector(`script[src="${src}"]`)) return res();
-        const s = document.createElement('script'); s.src = src;
-        if (module) s.type = 'module';
-        s.onload = res;
-        s.onerror = () => rej(new Error(`No se pudo cargar script: ${src}`));
-        document.head.appendChild(s);
-      });
 
       const initializeAframeVideo = projectData => {
         const scene = document.createElement('a-scene');
@@ -59,21 +49,13 @@
         const assets = document.createElement('a-assets');
         const video = document.createElement('video');
         video.id = 'vid';
-        video.setAttribute('preload', 'auto');
-        video.setAttribute('loop', '');
-        video.setAttribute('muted', '');
-        video.setAttribute('playsinline', '');
-        video.setAttribute('webkit-playsinline', '');
-        video.setAttribute('crossorigin', 'anonymous');
+        ['preload:auto','loop','muted','playsinline','webkit-playsinline','crossorigin:anonymous']
+          .forEach(a => video.setAttribute(...a.split(':')));
 
-        // Selección de formato para transparencia
-        if (video.canPlayType('video/webm; codecs="vp8, vorbis"')) {
-          video.src = projectData.model_url; // WebM con canal alpha
-        } else if (video.canPlayType('video/mp4; codecs="hvc1"')) {
-          video.src = projectData.model_url.replace(/\.webm$/, '.mp4'); // HEVC para Safari iOS
-        } else {
-          video.src = projectData.model_url;
-        }
+        if (video.canPlayType('video/webm; codecs="vp8, vorbis"')) video.src = projectData.model_url;
+        else if (video.canPlayType('video/mp4; codecs="hvc1"')) video.src = projectData.model_url.replace(/\.webm$/, '.mp4');
+        else video.src = projectData.model_url;
+
         assets.appendChild(video);
         scene.appendChild(assets);
 
@@ -81,9 +63,7 @@
         if (projectData.marker_type === 'image' && projectData.marker_url) {
           marker.setAttribute('type', 'pattern');
           marker.setAttribute('url', projectData.marker_url);
-        } else {
-          marker.setAttribute('preset', 'hiro');
-        }
+        } else marker.setAttribute('preset', 'hiro');
         marker.setAttribute('emitevents', 'true');
 
         const plane = document.createElement('a-plane');
@@ -93,7 +73,7 @@
         marker.appendChild(plane);
 
         scene.appendChild(marker);
-        scene.appendChild(document.createElement('a-entity').setAttribute('camera', ''));
+        scene.appendChild(document.createElement('a-entity').setAttribute('camera', ''));        
         arContainer.appendChild(scene);
 
         scene.addEventListener('loaded', () => {
@@ -104,26 +84,37 @@
         });
       };
 
-      const initializeModelViewer = projectData => {
-        loadScript('https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js', true)
-        .then(() => {
-          const mv = document.createElement('model-viewer');
-          mv.setAttribute('src', projectData.model_url);
-          mv.setAttribute('alt', `3D de ${projectData.name}`);
-          mv.setAttribute('ar', '');
-          mv.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
-          mv.setAttribute('camera-controls', '');
-          mv.setAttribute('enable-pan', '');
-          mv.setAttribute('autoplay', '');
-          mv.setAttribute('crossorigin', 'anonymous');
-          mv.setAttribute('scale', '2 2 2');
-          mv.style.width = '100%';
-          mv.style.height = '100%';
-          arContainer.appendChild(mv);
-          mv.addEventListener('load', () => loader.classList.add('hidden'));
-          mv.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
-        })
-        .catch(err => showError(err.message));
+      const initializeGltfModel = projectData => {
+        const scene = document.createElement('a-scene');
+        scene.setAttribute('embedded', '');
+        scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
+        scene.setAttribute('renderer', 'alpha: true; logarithmicDepthBuffer: true');
+
+        const assets = document.createElement('a-assets');
+        const modelItem = document.createElement('a-asset-item');
+        modelItem.id = 'model-asset';
+        modelItem.setAttribute('src', projectData.model_url);
+        assets.appendChild(modelItem);
+        scene.appendChild(assets);
+
+        const marker = document.createElement('a-marker');
+        if (projectData.marker_type === 'image' && projectData.marker_url) {
+          marker.setAttribute('type', 'pattern');
+          marker.setAttribute('url', projectData.marker_url);
+        } else marker.setAttribute('preset', 'hiro');
+        marker.setAttribute('emitevents', 'true');
+
+        const modelEl = document.createElement('a-entity');
+        modelEl.setAttribute('gltf-model', '#model-asset');
+        modelEl.setAttribute('scale', '2 2 2');
+        modelEl.setAttribute('position', '0 0 0');
+        marker.appendChild(modelEl);
+
+        scene.appendChild(marker);
+        scene.appendChild(document.createElement('a-entity').setAttribute('camera', ''));
+        arContainer.appendChild(scene);
+
+        scene.addEventListener('loaded', () => loader.classList.add('hidden'));
       };
 
       (async () => {
@@ -131,13 +122,12 @@
           const parts = window.location.pathname.split('/');
           const projectId = parts.pop() || parts.pop();
           if (!projectId) throw new Error('ID de proyecto no encontrado.');
-
           const resp = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
           if (!resp.ok) throw new Error(`Proyecto no encontrado (Error ${resp.status})`);
           const pd = await resp.json();
 
           if (pd.asset_type === 'video') initializeAframeVideo(pd);
-          else initializeModelViewer(pd);
+          else initializeGltfModel(pd);
         } catch (e) {
           showError(e.message);
         }
