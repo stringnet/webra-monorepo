@@ -21,6 +21,7 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #ar-container { width: 100%; height: 100%; position: relative; }
     model-viewer { width: 100%; height: 100%; display: block; }
+    video#vid { display: none; }
   </style>
 </head>
 <body>
@@ -67,7 +68,6 @@
           scene.setAttribute('vr-mode-ui', 'enabled: false');
           scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; alpha: true; antialias: true');
 
-          const assets = document.createElement('a-assets');
           const video = document.createElement('video');
           video.id = 'vid';
           video.setAttribute('loop', '');
@@ -76,14 +76,13 @@
           video.setAttribute('crossorigin', 'anonymous');
           video.setAttribute('playsinline', '');
           video.setAttribute('webkit-playsinline', '');
+          video.setAttribute('preload', 'auto');
 
-          // Elegir src según compatibilidad
           const webmURL = projectData.model_url;
           const mp4URL = webmURL.replace(/\.webm$/i, '.mp4');
           video.src = isIOS() ? mp4URL : webmURL;
 
-          assets.appendChild(video);
-          scene.appendChild(assets);
+          document.body.appendChild(video);
 
           const marker = document.createElement('a-marker');
           if (projectData.marker_type === 'image' && projectData.marker_url) {
