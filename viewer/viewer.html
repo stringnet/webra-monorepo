@@ -5,27 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Visualizador de RA - WebRA</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
     .container { position: relative; width: 100vw; height: 100vh; }
-    .overlay { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.8); color: #fff; z-index: 2; }
+    .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: rgba(0,0,0,0.8); color: #fff; z-index: 2; text-align: center; }
     .overlay.hidden { display: none; }
     .spinner { border: 5px solid #444; border-top: 5px solid #fff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #ar-container { width: 100%; height: 100%; }
   </style>
-
-  <!-- A-Frame (debe cargarse antes de AR.js) -->
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <!-- AR.js para A-Frame -->
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
-  <!-- Shader para video transparente -->
-  <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
 </head>
 <body>
   <div id="loader" class="overlay">
     <div class="spinner"></div>
     <p id="loader-text">Cargando proyecto...</p>
   </div>
+
   <div id="ar-container" class="container"></div>
 
   <script>
@@ -41,91 +35,109 @@
         if (spinner) spinner.style.display = 'none';
       };
 
+      const loadScript = (src, isModule = false) => new Promise((res, rej) => {
+        if (document.querySelector(`script[src="${src}"]`)) return res();
+        const s = document.createElement('script'); s.src = src;
+        if (isModule) s.type = 'module';
+        s.onload = res;
+        s.onerror = () => rej(new Error(`No se pudo cargar el script: ${src}`));
+        document.head.appendChild(s);
+      });
+
       const initializeAframeVideo = projectData => {
-        const scene = document.createElement('a-scene');
-        scene.setAttribute('embedded', '');
-        scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
-        scene.setAttribute('renderer', 'alpha: true; logarithmicDepthBuffer: true');
+        // Carga secuencial de librerías
+        loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
+        .then(() => loadScript('https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js'))
+        .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
+        .then(() => {
+          const scene = document.createElement('a-scene');
+          scene.setAttribute('embedded', '');
+          scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
+          scene.setAttribute('renderer', 'alpha: true; antialias: true');
 
-        const assets = document.createElement('a-assets');
-        const video = document.createElement('video');
-        video.id = 'vid';
-        ['preload:auto', 'loop', 'muted', 'playsinline', 'webkit-playsinline', 'crossorigin:anonymous']
-          .forEach(attr => video.setAttribute(...attr.split(':')));
-        if (video.canPlayType('video/webm; codecs="vp8, vorbis"')) video.src = projectData.model_url;
-        else if (video.canPlayType('video/mp4; codecs="hvc1"')) video.src = projectData.model_url.replace(/\.webm$/, '.mp4');
-        else video.src = projectData.model_url;
-        assets.appendChild(video);
-        scene.appendChild(assets);
+          // Assets
+          const assets = document.createElement('a-assets');
+          const videoEl = document.createElement('video');
+          videoEl.id = 'video-asset';
+          videoEl.setAttribute('src', projectData.model_url);
+          videoEl.setAttribute('loop', '');
+          videoEl.setAttribute('muted', '');
+          videoEl.setAttribute('playsinline', '');
+          videoEl.setAttribute('webkit-playsinline', '');
+          videoEl.setAttribute('crossorigin', 'anonymous');
+          assets.appendChild(videoEl);
+          scene.appendChild(assets);
 
-        const marker = document.createElement('a-marker');
-        if (projectData.marker_type === 'image' && projectData.marker_url) {
-          marker.setAttribute('type', 'pattern');
-          marker.setAttribute('url', projectData.marker_url);
-        } else {
-          marker.setAttribute('preset', 'hiro');
-        }
-        marker.setAttribute('emitevents', 'true');
+          // Marker
+          const marker = document.createElement('a-marker');
+          if (projectData.marker_type === 'image' && projectData.marker_url) {
+            marker.setAttribute('type', 'pattern');
+            marker.setAttribute('url', projectData.marker_url);
+          } else marker.setAttribute('preset', 'hiro');
+          marker.setAttribute('emitevents', 'true');
 
-        const plane = document.createElement('a-plane');
-        plane.setAttribute('geometry', 'width: 1.6; height: 0.9');
-        plane.setAttribute('rotation', '-90 0 0');
-        plane.setAttribute('material', 'shader: transparent-video; src: #vid; transparent: true; premultipliedAlpha: true');
-        marker.appendChild(plane);
+          // Plane for video
+          const plane = document.createElement('a-plane');
+          plane.setAttribute('geometry', 'width: 1.6; height: 0.9');
+          plane.setAttribute('rotation', '-90 0 0');
+          plane.setAttribute('material', 'shader: transparent-video; src: #video-asset; transparent: true; premultipliedAlpha: true');
+          marker.appendChild(plane);
 
-        scene.appendChild(marker);
-        // Camera
-        const cameraElV = document.createElement('a-entity');
-        cameraElV.setAttribute('camera', '');
-        scene.appendChild(cameraElV);
-        arContainer.appendChild(scene);
+          scene.appendChild(marker);
 
-        scene.addEventListener('loaded', () => {
-          loader.classList.add('hidden');
-          video.play().catch(() => {});
-          marker.addEventListener('markerFound', () => video.play());
-          marker.addEventListener('markerLost', () => video.pause());
-        });
+          // Camera
+          const cam = document.createElement('a-entity');
+          cam.setAttribute('camera', '');
+          scene.appendChild(cam);
+
+          arContainer.appendChild(scene);
+
+          scene.addEventListener('loaded', () => {
+            loader.classList.add('hidden');
+            videoEl.play().catch(() => {});
+            marker.addEventListener('markerFound', () => videoEl.play());
+            marker.addEventListener('markerLost', () => videoEl.pause());
+          });
+        })
+        .catch(err => showError(err.message));
       };
 
       const initializeGltfModel = projectData => {
-        const scene = document.createElement('a-scene');
-        scene.setAttribute('embedded', '');
-        scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
-        scene.setAttribute('renderer', 'alpha: true; logarithmicDepthBuffer: true');
+        loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
+        .then(() => loadScript('https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js'))
+        .then(() => {
+          const scene = document.createElement('a-scene');
+          scene.setAttribute('embedded', '');
+          scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
+          scene.setAttribute('renderer', 'alpha: true; antialias: true');
 
-        const assets = document.createElement('a-assets');
-        const modelItem = document.createElement('a-asset-item');
-        modelItem.id = 'model-asset';
-        modelItem.setAttribute('src', projectData.model_url);
-        assets.appendChild(modelItem);
-        scene.appendChild(assets);
+          const assets = document.createElement('a-assets');
+          const item = document.createElement('a-asset-item');
+          item.id = 'model-asset';
+          item.setAttribute('src', projectData.model_url);
+          assets.appendChild(item);
+          scene.appendChild(assets);
 
-        const marker = document.createElement('a-marker');
-        if (projectData.marker_type === 'image' && projectData.marker_url) {
-          marker.setAttribute('type', 'pattern');
-          marker.setAttribute('url', projectData.marker_url);
-        } else {
-          marker.setAttribute('preset', 'hiro');
-        }
-        marker.setAttribute('emitevents', 'true');
+          const marker = document.createElement('a-marker');
+          if (projectData.marker_type === 'image' && projectData.marker_url) {
+            marker.setAttribute('type', 'pattern');
+            marker.setAttribute('url', projectData.marker_url);
+          } else marker.setAttribute('preset', 'hiro');
+          marker.setAttribute('emitevents', 'true');
 
-        const modelEl = document.createElement('a-entity');
-        modelEl.setAttribute('gltf-model', '#model-asset');
-        modelEl.setAttribute('scale', '2 2 2');
-        modelEl.setAttribute('position', '0 0 0');
-        marker.appendChild(modelEl);
+          const modelEnt = document.createElement('a-entity');
+          modelEnt.setAttribute('gltf-model', '#model-asset');
+          modelEnt.setAttribute('scale', '2 2 2');
+          modelEnt.setAttribute('position', '0 0 0');
+          marker.appendChild(modelEnt);
 
-        scene.appendChild(marker);
-        // Camera
-        const cameraElM = document.createElement('a-entity');
-        cameraElM.setAttribute('camera', '');
-        scene.appendChild(cameraElM);
-        arContainer.appendChild(scene);
+          scene.appendChild(marker);
+          const cam = document.createElement('a-entity'); cam.setAttribute('camera', ''); scene.appendChild(cam);
+          arContainer.appendChild(scene);
 
-        scene.addEventListener('loaded', () => {
-          loader.classList.add('hidden');
-        });
+          scene.addEventListener('loaded', () => loader.classList.add('hidden'));
+        })
+        .catch(err => showError(err.message));
       };
 
       (async () => {
