@@ -18,7 +18,7 @@ export const getProjects = async (req, res) => {
 // Crear un nuevo proyecto
 export const createProject = async (req, res) => {
     // Ahora recibimos los public_id desde el frontend
-    const { name, model_url, marker_type, marker_url, model_public_id, marker_public_id } = req.body;
+    const { name, asset_type, model_url, marker_type, marker_url, model_public_id, marker_public_id } = req.body;
     const userId = req.user.id;
 
     if (marker_type === 'image' && !marker_url) {
@@ -53,8 +53,8 @@ export const createProject = async (req, res) => {
         const view_url = `https://webar.scanmee.io/view/${projectId}`;
 
         const newProject = await pool.query(
-            'INSERT INTO ar_projects (id, user_id, name, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-            [projectId, userId, name, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id]
+            'INSERT INTO ar_projects (id, user_id, name, asset_type, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+            [projectId, userId, name, asset_type, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id]
         );
 
         res.status(201).json(newProject.rows[0]);
