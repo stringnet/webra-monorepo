@@ -132,31 +132,36 @@
                 ]).then(() => {
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
-                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;');
                     scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
                     const assets = document.createElement('a-assets');
                     const videoAsset = document.createElement('video');
                     videoAsset.id = 'video-asset';
-                    videoAsset.setAttribute('src', projectData.model_url); // En este caso, model_url contiene la URL del video
+                    videoAsset.setAttribute('src', projectData.model_url); // model_url contiene la URL del video
                     videoAsset.setAttribute('loop', 'true');
                     videoAsset.setAttribute('crossorigin', 'anonymous');
-                    videoAsset.setAttribute('playsinline', '');
-                    videoAsset.setAttribute('webkit-playsinline', '');
+                    videoAsset.setAttribute('playsinline', 'true');
+                    videoAsset.setAttribute('webkit-playsinline', 'true');
                     assets.appendChild(videoAsset);
                     scene.appendChild(assets);
 
                     const marker = document.createElement('a-marker');
-                    // Usamos Hiro para máxima fiabilidad con video y QR
-                    marker.setAttribute('preset', 'hiro'); 
+                    
+                    if(projectData.marker_type === 'image' && projectData.marker_url) {
+                        marker.setAttribute('type', 'pattern');
+                        marker.setAttribute('url', projectData.marker_url);
+                    } else { // Para QR o si no hay marcador de imagen, usamos Hiro
+                        marker.setAttribute('preset', 'hiro'); 
+                    }
                     marker.setAttribute('emitevents', 'true');
 
-                    const videoPlane = document.createElement('a-video');
-                    videoPlane.setAttribute('src', '#video-asset');
+                    // CORRECCIÓN: Usamos a-plane con un material configurado para transparencia
+                    const videoPlane = document.createElement('a-plane');
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
                     videoPlane.setAttribute('rotation', '-90 0 0');
-                    videoPlane.setAttribute('transparent', 'true');
+                    videoPlane.setAttribute('material', `shader: flat; src: #video-asset; transparent: true; alphaTest: 0.5;`);
                     
                     marker.appendChild(videoPlane);
                     scene.appendChild(marker);
@@ -171,7 +176,7 @@
                         loader.classList.add('hidden');
                         const video = document.getElementById('video-asset');
                          marker.addEventListener('markerFound', () => {
-                             video.play();
+                            video.play();
                          });
                          marker.addEventListener('markerLost', () => {
                              video.pause();
