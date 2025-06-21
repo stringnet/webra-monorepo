@@ -129,8 +129,10 @@
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                     scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
-                    // ASSETS
+                    // ASSETS con timeout extendido
                     const assets = document.createElement('a-assets');
+                    assets.setAttribute('timeout', '10000'); // 10 segundos
+
                     const videoAsset = document.createElement('video');
                     videoAsset.id = 'video-asset';
                     videoAsset.setAttribute('src', projectData.model_url);
@@ -143,7 +145,6 @@
                     assets.appendChild(videoAsset);
                     scene.appendChild(assets);
 
-                    // Asegura autoplay en móviles
                     videoAsset.addEventListener('loadeddata', () => { 
                         videoAsset.play().catch(()=>{}); 
                     });
@@ -158,17 +159,17 @@
                     }
                     marker.setAttribute('emitevents', 'true');
 
-                    // PLANO DE VIDEO CON SHADER DE TRANSPARENCIA
-                    // Cambia el color y threshold según tu fondo de croma (por defecto: verde)
-                    marker.innerHTML = `
-                        <a-plane 
-                            material="shader: transparent-video; src: #video-asset; color: 0,1,0; threshold: 0.3;"
-                            width="1.6"
-                            height="0.9"
-                            rotation="-90 0 0"
-                        ></a-plane>
-                    `;
+                    // PLANO DE VIDEO TRANSPARENTE (shader y parámetros van como atributos separados)
+                    const videoPlane = document.createElement('a-plane');
+                    videoPlane.setAttribute('shader', 'transparent-video');
+                    videoPlane.setAttribute('src', '#video-asset');
+                    videoPlane.setAttribute('color', '0,1,0'); // Verde puro (cambia si tu chroma es otro)
+                    videoPlane.setAttribute('threshold', '0.3'); // Ajusta este valor según tu video
+                    videoPlane.setAttribute('width', '1.6');
+                    videoPlane.setAttribute('height', '0.9');
+                    videoPlane.setAttribute('rotation', '-90 0 0');
 
+                    marker.appendChild(videoPlane);
                     scene.appendChild(marker);
                     scene.appendChild(document.createElement('a-camera'));
                     arContainer.appendChild(scene);
@@ -188,7 +189,7 @@
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
-                    if (!projectId) throw new Error("ID de proyecto no encontrado.");
+                    if (!rojectId) throw new Error("ID de proyecto no encontrado.");
 
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
