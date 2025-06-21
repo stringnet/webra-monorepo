@@ -46,45 +46,48 @@
 
     <script>
         // --- COMPONENTE PERSONALIZADO PARA VIDEO CON TRANSPARENCIA ---
-        AFRAME.registerComponent('video-handler', {
+        // Basado en la técnica de Chroma Key y Canal Alfa
+        AFRAME.registerComponent('video-transparency', {
             schema: {
-                src: { type: 'string' },
-                chromaKeyColor: { type: 'color', default: '#00FF00' } // Verde por defecto
+                src: { type: 'asset' },
+                color: { type: 'color', default: '#000' }, // Color para Chroma Key (negro por defecto)
+                alpha: { type: 'boolean', default: false} // Indica si el video tiene canal alfa nativo
             },
             init: function () {
-                const videoEl = document.createElement('video');
-                videoEl.id = 'video-asset-' + this.el.id;
-                videoEl.setAttribute('src', this.data.src);
-                videoEl.setAttribute('loop', true);
-                videoEl.setAttribute('crossorigin', 'anonymous');
-                videoEl.setAttribute('playsinline', '');
-                videoEl.setAttribute('webkit-playsinline', '');
-                
-                // Intentar reproducir automáticamente (requerido por algunos navegadores)
-                videoEl.play().catch(e => console.warn("La autoreproducción del video fue bloqueada, requiere interacción del usuario."));
-                
-                this.el.sceneEl.appendChild(videoEl);
-                this.videoEl = videoEl;
+                this.video = this.data.src;
+                if (!this.video) return;
 
-                // Intentar usar el canal alfa del video
-                const material = new THREE.VideoTexture(videoEl);
-                material.minFilter = THREE.LinearFilter;
-                material.magFilter = THREE.LinearFilter;
+                // Definición de los shaders
+                const vertexShader = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+                const fragmentShader_alpha = 'uniform sampler2D u_texture; varying vec2 vUv; void main() { vec4 color = texture2D(u_texture, vUv); if (color.a < 0.2) discard; gl_FragColor = color; }';
+                const fragmentShader_chroma = `
+                    uniform sampler2D u_texture;
+                    uniform vec3 u_color;
+                    varying vec2 vUv;
+                    void main() {
+                        vec3 tColor = texture2D(u_texture, vUv).rgb;
+                        float a = (length(tColor - u_color) - 0.5) * 7.0;
+                        gl_FragColor = vec4(tColor, a);
+                    }
+                `;
+
+                const shader = this.data.alpha ? fragmentShader_alpha : fragmentShader_chroma;
+
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        u_texture: { value: new THREE.VideoTexture(this.video) },
+                        u_color: { value: new THREE.Color(this.data.color) }
+                    },
+                    vertexShader: vertexShader,
+                    fragmentShader: shader,
+                    transparent: true
+                });
                 
                 const mesh = this.el.getObject3D('mesh');
                 if (mesh) {
-                    mesh.material = new THREE.MeshBasicMaterial({
-                        map: material,
-                        transparent: true,
-                        alphaTest: 0.5
-                    });
+                    mesh.material = material;
                 }
-
-                // Si lo anterior no funciona bien (depende del códec), se usaría un shader de chroma key
-                // Por simplicidad, nos enfocamos en el canal alfa que es lo ideal para VP8/VP9
-            },
-            play: function () { this.videoEl.play(); },
-            pause: function () { this.videoEl.pause(); }
+            }
         });
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -141,6 +144,19 @@
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                     scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
+                    const assets = document.createElement('a-assets');
+                    const videoAsset = document.createElement('video');
+                    videoAsset.id = 'video-asset';
+                    videoAsset.setAttribute('src', projectData.model_url);
+                    videoAsset.setAttribute('loop', 'true');
+                    videoAsset.setAttribute('autoplay', 'true'); // Autoplay es importante
+                    videoAsset.setAttribute('muted', 'true'); // Esencial para autoplay en móviles
+                    videoAsset.setAttribute('crossorigin', 'anonymous');
+                    videoAsset.setAttribute('playsinline', 'true');
+                    videoAsset.setAttribute('webkit-playsinline', 'true');
+                    assets.appendChild(videoAsset);
+                    scene.appendChild(assets);
+
                     const marker = document.createElement('a-marker');
                     
                     if(projectData.marker_type === 'image' && projectData.marker_url) {
@@ -151,23 +167,23 @@
                     }
                     marker.setAttribute('emitevents', 'true');
                     
-                    // Usamos nuestro nuevo componente personalizado
-                    const videoEntity = document.createElement('a-plane');
-                    videoEntity.setAttribute('video-handler', { src: projectData.model_url });
-                    videoEntity.setAttribute('width', '1.6');
-                    videoEntity.setAttribute('height', '0.9');
-                    videoEntity.setAttribute('rotation', '-90 0 0');
+                    const videoPlane = document.createElement('a-plane');
+                    // Aplicamos nuestro componente personalizado
+                    videoPlane.setAttribute('video-transparency', { src: '#video-asset', alpha: true });
+                    videoPlane.setAttribute('width', '1.6');
+                    videoPlane.setAttribute('height', '0.9');
+                    videoPlane.setAttribute('rotation', '-90 0 0');
                     
-                    marker.appendChild(videoEntity);
+                    marker.appendChild(videoPlane);
                     scene.appendChild(marker);
                     scene.appendChild(document.createElement('a-camera'));
                     arContainer.appendChild(scene);
 
                     scene.addEventListener('loaded', () => {
                         loader.classList.add('hidden');
-                        const videoHandler = videoEntity.components['video-handler'];
-                        marker.addEventListener('markerFound', () => videoHandler.play());
-                        marker.addEventListener('markerLost', () => videoHandler.pause());
+                        const video = document.getElementById('video-asset');
+                        // Asegurarnos de que el video se reproduzca
+                        video.play().catch(e => console.log("La reproducción del video requiere interacción."));
                     });
                 }).catch(() => showError('No se pudo cargar la librería de RA.'));
             };
