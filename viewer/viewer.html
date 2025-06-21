@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- NOTA: Las librerías específicas se cargarán dinámicamente con JavaScript -->
-
     <style>
         body { 
             margin: 0; 
@@ -72,6 +70,61 @@
     </div>
 
     <script>
+        // Componente personalizado para video con transparencia
+        AFRAME.registerComponent('video-transparency', {
+            schema: {
+                chromaKey: {type: 'color', default: '#00ff00'}, // Color croma por defecto (verde)
+                threshold: {type: 'number', default: 0.4},
+                smoothing: {type: 'number', default: 0.1}
+            },
+            
+            init: function() {
+                this.video = this.el.components.material.material.map.image;
+                this.createShaderMaterial();
+            },
+            
+            createShaderMaterial: function() {
+                const chromaKeyShader = {
+                    uniforms: {
+                        tDiffuse: { value: null },
+                        keyColor: { value: new THREE.Color(this.data.chromaKey) },
+                        threshold: { value: this.data.threshold },
+                        smoothing: { value: this.data.smoothing }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform sampler2D tDiffuse;
+                        uniform vec3 keyColor;
+                        uniform float threshold;
+                        uniform float smoothing;
+                        varying vec2 vUv;
+                        
+                        void main() {
+                            vec4 texColor = texture2D(tDiffuse, vUv);
+                            
+                            float diff = length(texColor.rgb - keyColor);
+                            float alpha = smoothstep(threshold, threshold + smoothing, diff);
+                            
+                            gl_FragColor = vec4(texColor.rgb, texColor.a * alpha);
+                        }
+                    `
+                };
+                
+                const material = new THREE.ShaderMaterial(chromaKeyShader);
+                material.uniforms.tDiffuse.value = new THREE.VideoTexture(this.video);
+                material.transparent = true;
+                material.side = THREE.DoubleSide;
+                
+                this.el.getObject3D('mesh').material = material;
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const arContainer = document.getElementById('ar-container');
@@ -87,7 +140,7 @@
             const loadScript = (src, isModule = false) => {
                 return new Promise((resolve, reject) => {
                     if (document.querySelector(`script[src="${src}"]`)) {
-                        resolve(); // El script ya está cargado
+                        resolve();
                         return;
                     }
                     const script = document.createElement('script');
@@ -133,16 +186,18 @@
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;');
-                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; antialias: true; colorManagement: true;');
 
                     const assets = document.createElement('a-assets');
                     const videoAsset = document.createElement('video');
                     videoAsset.id = 'video-asset';
-                    videoAsset.setAttribute('src', projectData.model_url); // model_url contiene la URL del video
+                    videoAsset.setAttribute('src', projectData.model_url);
                     videoAsset.setAttribute('loop', 'true');
+                    videoAsset.setAttribute('muted', 'true'); // Necesario para autoplay
                     videoAsset.setAttribute('crossorigin', 'anonymous');
                     videoAsset.setAttribute('playsinline', 'true');
                     videoAsset.setAttribute('webkit-playsinline', 'true');
+                    videoAsset.setAttribute('preload', 'metadata');
                     assets.appendChild(videoAsset);
                     scene.appendChild(assets);
 
@@ -151,17 +206,42 @@
                     if(projectData.marker_type === 'image' && projectData.marker_url) {
                         marker.setAttribute('type', 'pattern');
                         marker.setAttribute('url', projectData.marker_url);
-                    } else { // Para QR o si no hay marcador de imagen, usamos Hiro
+                    } else {
                         marker.setAttribute('preset', 'hiro'); 
                     }
                     marker.setAttribute('emitevents', 'true');
 
-                    // CORRECCIÓN: Usamos a-plane con un material configurado para transparencia
+                    // Crear el plano de video con transparencia mejorada
                     const videoPlane = document.createElement('a-plane');
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
                     videoPlane.setAttribute('rotation', '-90 0 0');
-                    videoPlane.setAttribute('material', `shader: flat; src: #video-asset; transparent: true; alphaTest: 0.5;`);
+                    
+                    // Configuración del material para mejor transparencia
+                    if (projectData.video_has_alpha || projectData.use_chroma_key) {
+                        // Para videos con canal alpha o que requieren chroma key
+                        videoPlane.setAttribute('material', `
+                            shader: flat; 
+                            src: #video-asset; 
+                            transparent: true; 
+                            alphaTest: 0.1;
+                            side: double;
+                        `);
+                        
+                        // Agregar componente de transparencia personalizado si es chroma key
+                        if (projectData.use_chroma_key) {
+                            const chromaColor = projectData.chroma_color || '#00ff00';
+                            videoPlane.setAttribute('video-transparency', `chromaKey: ${chromaColor}; threshold: 0.4; smoothing: 0.1`);
+                        }
+                    } else {
+                        // Para videos normales
+                        videoPlane.setAttribute('material', `
+                            shader: flat; 
+                            src: #video-asset; 
+                            transparent: false;
+                            side: double;
+                        `);
+                    }
                     
                     marker.appendChild(videoPlane);
                     scene.appendChild(marker);
@@ -175,12 +255,31 @@
                     scene.addEventListener('loaded', () => {
                         loader.classList.add('hidden');
                         const video = document.getElementById('video-asset');
-                         marker.addEventListener('markerFound', () => {
-                            video.play();
-                         });
-                         marker.addEventListener('markerLost', () => {
-                             video.pause();
-                         });
+                        
+                        // Mejorar el manejo de eventos del marcador
+                        marker.addEventListener('markerFound', () => {
+                            console.log('Marcador encontrado');
+                            if (video.paused) {
+                                video.play().catch(e => {
+                                    console.warn('Error al reproducir video:', e);
+                                });
+                            }
+                        });
+                        
+                        marker.addEventListener('markerLost', () => {
+                            console.log('Marcador perdido');
+                            video.pause();
+                        });
+
+                        // Precargar el video
+                        video.addEventListener('loadeddata', () => {
+                            console.log('Video cargado y listo');
+                        });
+
+                        video.addEventListener('error', (e) => {
+                            console.error('Error al cargar el video:', e);
+                            showError('No se pudo cargar el video.');
+                        });
                     });
                 }).catch(() => showError('No se pudo cargar la librería de RA.'));
             };
@@ -198,7 +297,7 @@
                     
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
-                    } else { // 'model' es el default
+                    } else {
                         initializeModelViewer(projectData);
                     }
 
