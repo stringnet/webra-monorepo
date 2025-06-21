@@ -13,6 +13,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #ar-container { width: 100%; height: 100%; }
   </style>
+
+  <!-- A-Frame (debe cargarse antes de AR.js) -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- AR.js para A-Frame -->
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+  <!-- Shader para video transparente -->
+  <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
 </head>
 <body>
   <div id="loader" class="overlay">
@@ -20,11 +27,6 @@
     <p id="loader-text">Cargando proyecto...</p>
   </div>
   <div id="ar-container" class="container"></div>
-
-  <!-- AR.js + A-Frame + Transparent Video Shader -->
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -41,8 +43,7 @@
 
       const loadScript = (src, module = false) => new Promise((res, rej) => {
         if (document.querySelector(`script[src="${src}"]`)) return res();
-        const s = document.createElement('script');
-        s.src = src;
+        const s = document.createElement('script'); s.src = src;
         if (module) s.type = 'module';
         s.onload = res;
         s.onerror = () => rej(new Error(`No se pudo cargar script: ${src}`));
@@ -53,7 +54,7 @@
         const scene = document.createElement('a-scene');
         scene.setAttribute('embedded', '');
         scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false');
-        scene.setAttribute('renderer', 'alpha: true; premultipliedAlpha: true; logarithmicDepthBuffer: true');
+        scene.setAttribute('renderer', 'alpha: true; logarithmicDepthBuffer: true');
 
         const assets = document.createElement('a-assets');
         const video = document.createElement('video');
@@ -64,16 +65,15 @@
         video.setAttribute('playsinline', '');
         video.setAttribute('webkit-playsinline', '');
         video.setAttribute('crossorigin', 'anonymous');
-        
+
         // Selección de formato para transparencia
         if (video.canPlayType('video/webm; codecs="vp8, vorbis"')) {
           video.src = projectData.model_url; // WebM con canal alpha
         } else if (video.canPlayType('video/mp4; codecs="hvc1"')) {
           video.src = projectData.model_url.replace(/\.webm$/, '.mp4'); // HEVC para Safari iOS
         } else {
-          video.src = projectData.model_url; // fallback
+          video.src = projectData.model_url;
         }
-
         assets.appendChild(video);
         scene.appendChild(assets);
 
@@ -93,10 +93,7 @@
         marker.appendChild(plane);
 
         scene.appendChild(marker);
-        const cam = document.createElement('a-entity');
-        cam.setAttribute('camera', '');
-        scene.appendChild(cam);
-
+        scene.appendChild(document.createElement('a-entity').setAttribute('camera', ''));
         arContainer.appendChild(scene);
 
         scene.addEventListener('loaded', () => {
@@ -119,6 +116,9 @@
           mv.setAttribute('enable-pan', '');
           mv.setAttribute('autoplay', '');
           mv.setAttribute('crossorigin', 'anonymous');
+          mv.setAttribute('scale', '2 2 2');
+          mv.style.width = '100%';
+          mv.style.height = '100%';
           arContainer.appendChild(mv);
           mv.addEventListener('load', () => loader.classList.add('hidden'));
           mv.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
