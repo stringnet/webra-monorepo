@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- NOTA: Las librerías específicas se cargarán dinámicamente con JavaScript -->
+    <!-- NOTA: Las librerías se cargarán dinámicamente con JavaScript -->
 
     <style>
         body { 
@@ -120,12 +120,13 @@
             };
 
             const initializeAframeVideo = (projectData) => {
+                // Primero cargamos todas las librerías necesarias en orden
                 Promise.all([
                     loadScript('https://aframe.io/releases/1.5.0/aframe.min.js'),
                     loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'),
-                    // Cargamos la librería de shader para video transparente
                     loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js')
                 ]).then(() => {
+                    // Solo cuando TODAS las librerías están listas, construimos la escena
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
@@ -154,8 +155,8 @@
                     }
                     marker.setAttribute('emitevents', 'true');
 
-                    // Usamos el shader de la librería importada
                     const videoPlane = document.createElement('a-plane');
+                    // Ahora que la librería está cargada, A-Frame conoce este shader
                     videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
@@ -189,7 +190,7 @@
                     
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
-                    } else { // 'model' es el default
+                    } else { 
                         initializeModelViewer(projectData);
                     }
                 } catch (error) {
