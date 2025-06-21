@@ -81,15 +81,14 @@
                 if (spinner) spinner.style.display = 'none';
             };
 
-            // Utilidad para cargar scripts dinámicamente
-            const loadScript = (src, isModule = false) => {
+            // Carga dinámica de scripts JS
+            const loadScript = (src) => {
                 return new Promise((resolve, reject) => {
                     if (document.querySelector(`script[src="${src}"]`)) {
                         resolve(); return;
                     }
                     const script = document.createElement('script');
                     script.src = src;
-                    if (isModule) script.type = "module";
                     script.onload = resolve;
                     script.onerror = () => reject(new Error(`No se pudo cargar el script: ${src}`));
                     document.head.appendChild(script);
@@ -98,8 +97,9 @@
 
             // Inicializador para modelos 3D (model-viewer)
             const initializeModelViewer = (projectData) => {
-                loadScript('https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js', true)
+                loadScript('https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js')
                     .then(() => {
+                        arContainer.innerHTML = ""; // Limpia antes de cargar
                         const modelViewer = document.createElement('model-viewer');
                         modelViewer.setAttribute('src', projectData.model_url);
                         modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
@@ -120,10 +120,14 @@
 
             // Inicializador para videos con transparencia (A-Frame)
             const initializeAframeVideo = (projectData) => {
-                loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
-                .then(() => loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'))
-                .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
+                Promise.all([
+                    loadScript('https://aframe.io/releases/1.5.0/aframe.min.js'),
+                    loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'),
+                    loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js')
+                ])
                 .then(() => {
+                    arContainer.innerHTML = ""; // Limpia antes de cargar
+
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
@@ -135,7 +139,7 @@
 
                     const videoAsset = document.createElement('video');
                     videoAsset.id = 'video-asset';
-                    videoAsset.setAttribute('src', projectData.model_url);
+                    videoAsset.setAttribute('src', projectData.model_url); // DEBE SER WEBM PARA MEJOR COMPATIBILIDAD
                     videoAsset.setAttribute('loop', 'true');
                     videoAsset.setAttribute('autoplay', 'true');
                     videoAsset.setAttribute('muted', 'true');
@@ -145,6 +149,7 @@
                     assets.appendChild(videoAsset);
                     scene.appendChild(assets);
 
+                    // Asegura autoplay en móviles
                     videoAsset.addEventListener('loadeddata', () => { 
                         videoAsset.play().catch(()=>{}); 
                     });
@@ -159,12 +164,12 @@
                     }
                     marker.setAttribute('emitevents', 'true');
 
-                    // PLANO DE VIDEO TRANSPARENTE (shader y parámetros van como atributos separados)
+                    // PLANO DE VIDEO TRANSPARENTE (shader y parámetros separados)
                     const videoPlane = document.createElement('a-plane');
                     videoPlane.setAttribute('shader', 'transparent-video');
                     videoPlane.setAttribute('src', '#video-asset');
-                    videoPlane.setAttribute('color', '0,1,0'); // Verde puro (cambia si tu chroma es otro)
-                    videoPlane.setAttribute('threshold', '0.3'); // Ajusta este valor según tu video
+                    videoPlane.setAttribute('color', '0,1,0'); // Verde puro. Cambia si tu chroma es otro.
+                    videoPlane.setAttribute('threshold', '0.3');  // Ajusta este valor si el recorte no es perfecto
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
                     videoPlane.setAttribute('rotation', '-90 0 0');
@@ -189,13 +194,14 @@
                 try {
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
-                    if (!rojectId) throw new Error("ID de proyecto no encontrado.");
+                    if (!projectId) throw new Error("ID de proyecto no encontrado.");
 
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     
                     const projectData = await response.json();
-                    
+
+                    // Muestra asset de video (RA con chroma) o modelo 3D
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
                     } else { // 'model' es el default
