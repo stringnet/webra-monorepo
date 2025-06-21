@@ -155,8 +155,8 @@
                     }
                     marker.setAttribute('emitevents', 'true');
 
+                    // Usamos el shader de la librería importada
                     const videoPlane = document.createElement('a-plane');
-                    // Ahora que la librería está cargada, A-Frame conoce este shader
                     videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
@@ -190,7 +190,7 @@
                     
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
-                    } else { 
+                    } else { // 'model' es el default
                         initializeModelViewer(projectData);
                     }
                 } catch (error) {
