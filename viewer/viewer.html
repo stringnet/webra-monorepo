@@ -64,13 +64,25 @@
           const assets = document.createElement('a-assets');
           const video = document.createElement('video');
           video.id = 'vid';
-          video.setAttribute('src', projectData.model_url);
           video.setAttribute('loop', '');
           video.setAttribute('autoplay', '');
           video.setAttribute('muted', '');
           video.setAttribute('crossorigin', 'anonymous');
           video.setAttribute('playsinline', '');
           video.setAttribute('webkit-playsinline', '');
+
+          const sourceWebM = document.createElement('source');
+          sourceWebM.setAttribute('src', projectData.model_url);
+          sourceWebM.setAttribute('type', 'video/webm');
+
+          const sourceMP4 = document.createElement('source');
+          const mp4Url = projectData.model_url.replace(/\.webm$/i, '.mp4');
+          sourceMP4.setAttribute('src', mp4Url);
+          sourceMP4.setAttribute('type', 'video/mp4; codecs="hvc1"');
+
+          video.appendChild(sourceWebM);
+          video.appendChild(sourceMP4);
+
           assets.appendChild(video);
           scene.appendChild(assets);
 
@@ -91,14 +103,18 @@
 
           scene.appendChild(marker);
           scene.appendChild(document.createElement('a-camera'));
-
           arContainer.appendChild(scene);
 
           scene.addEventListener('loaded', () => {
             loader.classList.add('hidden');
-            video.play().catch(() => {});
-            marker.addEventListener('markerFound', () => video.play());
-            marker.addEventListener('markerLost', () => video.pause());
+            const vid = document.getElementById('vid');
+            const playOnInteraction = () => {
+              vid.play().catch(() => {});
+              document.body.removeEventListener('click', playOnInteraction);
+            };
+            document.body.addEventListener('click', playOnInteraction);
+            marker.addEventListener('markerFound', () => vid.play());
+            marker.addEventListener('markerLost', () => vid.pause());
           });
         })
         .catch(err => showError(err.message));
