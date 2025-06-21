@@ -120,13 +120,12 @@
             };
 
             const initializeAframeVideo = (projectData) => {
-                // Primero cargamos todas las librerías necesarias en orden
-                Promise.all([
-                    loadScript('https://aframe.io/releases/1.5.0/aframe.min.js'),
-                    loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'),
-                    loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js')
-                ]).then(() => {
-                    // Solo cuando TODAS las librerías están listas, construimos la escena
+                // CORRECCIÓN: Cargar scripts en secuencia para evitar errores de tiempo.
+                loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
+                .then(() => loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'))
+                .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
+                .then(() => {
+                    // Ahora que todas las librerías están cargadas en orden, construimos la escena.
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
                     scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
@@ -155,7 +154,6 @@
                     }
                     marker.setAttribute('emitevents', 'true');
 
-                    // Usamos el shader de la librería importada
                     const videoPlane = document.createElement('a-plane');
                     videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
                     videoPlane.setAttribute('width', '1.6');
