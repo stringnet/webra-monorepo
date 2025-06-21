@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Visualizador de RA - WebRA</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; }
-    .container { position: relative; width: 100%; height: 100%; }
+    body { margin: 0; overflow: hidden; }
+    .container { position: relative; width: 100vw; height: 100vh; }
     .overlay { position: absolute; inset: 0; display: flex;
       justify-content: center; align-items: center;
       background: rgba(0,0,0,0.8); color: #fff; z-index: 2; }
@@ -19,9 +19,7 @@
       animation: spin 1s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #ar-container { width: 100%; height: 100%; position: relative; }
-    model-viewer { width: 100%; height: 100%; display: block; }
-    video#vid { display: none; }
+    #ar-container { width: 100%; height: 100%; }
   </style>
 </head>
 <body>
@@ -55,34 +53,26 @@
         document.head.appendChild(s);
       });
 
-      const isIOS = () => {
-        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-      };
-
       const initializeAframeVideo = projectData => {
         loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
         .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
         .then(() => {
           const scene = document.createElement('a-scene');
-          scene.setAttribute('embedded', '');
           scene.setAttribute('vr-mode-ui', 'enabled: false');
-          scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; alpha: true; antialias: true');
+          scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; alpha: true;');
 
+          const assets = document.createElement('a-assets');
           const video = document.createElement('video');
           video.id = 'vid';
+          video.setAttribute('src', projectData.model_url);
           video.setAttribute('loop', '');
           video.setAttribute('autoplay', '');
           video.setAttribute('muted', '');
           video.setAttribute('crossorigin', 'anonymous');
           video.setAttribute('playsinline', '');
           video.setAttribute('webkit-playsinline', '');
-          video.setAttribute('preload', 'auto');
-
-          const webmURL = projectData.model_url;
-          const mp4URL = webmURL.replace(/\.webm$/i, '.mp4');
-          video.src = isIOS() ? mp4URL : webmURL;
-
-          document.body.appendChild(video);
+          assets.appendChild(video);
+          scene.appendChild(assets);
 
           const marker = document.createElement('a-marker');
           if (projectData.marker_type === 'image' && projectData.marker_url) {
@@ -94,26 +84,21 @@
           marker.setAttribute('emitevents', 'true');
 
           const plane = document.createElement('a-plane');
-          plane.setAttribute('geometry', 'height: 1.5; width: 2.66');
+          plane.setAttribute('geometry', 'height: 0.9; width: 1.6');
           plane.setAttribute('rotation', '-90 0 0');
           plane.setAttribute('material', 'shader: transparent-video; src: #vid; transparent: true');
           marker.appendChild(plane);
 
           scene.appendChild(marker);
           scene.appendChild(document.createElement('a-camera'));
-          arContainer.innerHTML = '';
+
           arContainer.appendChild(scene);
 
           scene.addEventListener('loaded', () => {
             loader.classList.add('hidden');
-            const vid = document.getElementById('vid');
-            const playOnInteraction = () => {
-              vid.play().catch(() => {});
-              document.body.removeEventListener('click', playOnInteraction);
-            };
-            document.body.addEventListener('click', playOnInteraction);
-            marker.addEventListener('markerFound', () => vid.play());
-            marker.addEventListener('markerLost', () => vid.pause());
+            video.play().catch(() => {});
+            marker.addEventListener('markerFound', () => video.play());
+            marker.addEventListener('markerLost', () => video.pause());
           });
         })
         .catch(err => showError(err.message));
@@ -131,9 +116,6 @@
           mv.setAttribute('enable-pan', '');
           mv.setAttribute('autoplay', '');
           mv.setAttribute('crossorigin', 'anonymous');
-          mv.style.width = '100%';
-          mv.style.height = '100%';
-          arContainer.innerHTML = '';
           arContainer.appendChild(mv);
           mv.addEventListener('load', () => loader.classList.add('hidden'));
           mv.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
