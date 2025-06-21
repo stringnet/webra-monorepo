@@ -5,32 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- Importamos A-Frame y AR.js -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    
+    <!-- NOTA: Las librerías específicas se cargarán dinámicamente con JavaScript -->
+
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        .overlay {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            text-align: center; background-color: rgba(0, 0, 0, 0.8);
-            color: white; z-index: 2;
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
         }
-        .overlay p { font-size: 1.2rem; max-width: 80%; margin: 10px 0; }
-        .overlay.hidden { display: none; }
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 2;
+        }
+        .overlay p {
+            font-size: 1.2rem;
+            max-width: 80%;
+            margin: 10px 0;
+        }
+        .overlay.hidden {
+            display: none;
+        }
         .spinner {
-            border: 5px solid #444; border-top: 5px solid #fff;
-            border-radius: 50%; width: 50px; height: 50px;
+            border: 5px solid #444;
+            border-top: 5px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
             animation: spin 1s linear infinite;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        model-viewer { width: 100%; height: 100%; }
-        #ar-scene { width: 100%; height: 100%; }
+        model-viewer {
+            width: 100%;
+            height: 100%;
+        }
+        #ar-scene {
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
@@ -40,56 +67,11 @@
         <p id="loader-text">Cargando proyecto...</p>
     </div>
     
-    <div id="ar-container" style="width:100%; height:100vh;">
+    <div id="ar-container" class="container">
         <!-- El contenido de RA se inyectará aquí -->
     </div>
 
     <script>
-        // --- COMPONENTE PERSONALIZADO PARA VIDEO CON TRANSPARENCIA ---
-        // Basado en la técnica de Chroma Key y Canal Alfa
-        AFRAME.registerComponent('video-transparency', {
-            schema: {
-                src: { type: 'asset' },
-                color: { type: 'color', default: '#000' }, // Color para Chroma Key (negro por defecto)
-                alpha: { type: 'boolean', default: false} // Indica si el video tiene canal alfa nativo
-            },
-            init: function () {
-                this.video = this.data.src;
-                if (!this.video) return;
-
-                // Definición de los shaders
-                const vertexShader = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
-                const fragmentShader_alpha = 'uniform sampler2D u_texture; varying vec2 vUv; void main() { vec4 color = texture2D(u_texture, vUv); if (color.a < 0.2) discard; gl_FragColor = color; }';
-                const fragmentShader_chroma = `
-                    uniform sampler2D u_texture;
-                    uniform vec3 u_color;
-                    varying vec2 vUv;
-                    void main() {
-                        vec3 tColor = texture2D(u_texture, vUv).rgb;
-                        float a = (length(tColor - u_color) - 0.5) * 7.0;
-                        gl_FragColor = vec4(tColor, a);
-                    }
-                `;
-
-                const shader = this.data.alpha ? fragmentShader_alpha : fragmentShader_chroma;
-
-                const material = new THREE.ShaderMaterial({
-                    uniforms: {
-                        u_texture: { value: new THREE.VideoTexture(this.video) },
-                        u_color: { value: new THREE.Color(this.data.color) }
-                    },
-                    vertexShader: vertexShader,
-                    fragmentShader: shader,
-                    transparent: true
-                });
-                
-                const mesh = this.el.getObject3D('mesh');
-                if (mesh) {
-                    mesh.material = material;
-                }
-            }
-        });
-
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const arContainer = document.getElementById('ar-container');
@@ -98,7 +80,8 @@
             
             const showError = (message) => {
                 loaderText.textContent = `Error: ${message}`;
-                document.querySelector('.spinner').style.display = 'none';
+                const spinner = document.querySelector('.spinner');
+                if (spinner) spinner.style.display = 'none';
             };
 
             const loadScript = (src, isModule = false) => {
@@ -110,7 +93,7 @@
                     script.src = src;
                     if (isModule) script.type = "module";
                     script.onload = resolve;
-                    script.onerror = reject;
+                    script.onerror = () => reject(new Error(`No se pudo cargar el script: ${src}`));
                     document.head.appendChild(script);
                 });
             };
@@ -127,17 +110,21 @@
                         modelViewer.setAttribute('enable-pan', '');
                         modelViewer.setAttribute('autoplay', '');
                         modelViewer.setAttribute('crossorigin', 'anonymous');
+
                         arContainer.appendChild(modelViewer);
+
                         modelViewer.addEventListener('load', () => loader.classList.add('hidden'));
                         modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
                     })
-                    .catch(() => showError('No se pudo cargar la librería del visor 3D.'));
+                    .catch((err) => showError(err.message));
             };
 
             const initializeAframeVideo = (projectData) => {
                 Promise.all([
                     loadScript('https://aframe.io/releases/1.5.0/aframe.min.js'),
-                    loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js')
+                    loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'),
+                    // Cargamos la librería de shader para video transparente
+                    loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js')
                 ]).then(() => {
                     const scene = document.createElement('a-scene');
                     scene.setAttribute('vr-mode-ui', 'enabled: false');
@@ -149,8 +136,8 @@
                     videoAsset.id = 'video-asset';
                     videoAsset.setAttribute('src', projectData.model_url);
                     videoAsset.setAttribute('loop', 'true');
-                    videoAsset.setAttribute('autoplay', 'true'); // Autoplay es importante
-                    videoAsset.setAttribute('muted', 'true'); // Esencial para autoplay en móviles
+                    videoAsset.setAttribute('autoplay', 'true');
+                    videoAsset.setAttribute('muted', 'true');
                     videoAsset.setAttribute('crossorigin', 'anonymous');
                     videoAsset.setAttribute('playsinline', 'true');
                     videoAsset.setAttribute('webkit-playsinline', 'true');
@@ -166,10 +153,10 @@
                         marker.setAttribute('preset', 'hiro'); 
                     }
                     marker.setAttribute('emitevents', 'true');
-                    
+
+                    // Usamos el shader de la librería importada
                     const videoPlane = document.createElement('a-plane');
-                    // Aplicamos nuestro componente personalizado
-                    videoPlane.setAttribute('video-transparency', { src: '#video-asset', alpha: true });
+                    videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
                     videoPlane.setAttribute('width', '1.6');
                     videoPlane.setAttribute('height', '0.9');
                     videoPlane.setAttribute('rotation', '-90 0 0');
@@ -182,10 +169,11 @@
                     scene.addEventListener('loaded', () => {
                         loader.classList.add('hidden');
                         const video = document.getElementById('video-asset');
-                        // Asegurarnos de que el video se reproduzca
-                        video.play().catch(e => console.log("La reproducción del video requiere interacción."));
+                        video.play().catch(() => {});
+                        marker.addEventListener('markerFound', () => video.play());
+                        marker.addEventListener('markerLost', () => video.pause());
                     });
-                }).catch(() => showError('No se pudo cargar la librería de RA.'));
+                }).catch((err) => showError(err.message));
             };
 
             const initialize = async () => {
@@ -201,7 +189,7 @@
                     
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
-                    } else {
+                    } else { // 'model' es el default
                         initializeModelViewer(projectData);
                     }
                 } catch (error) {
