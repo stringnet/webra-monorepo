@@ -54,6 +54,10 @@
         document.head.appendChild(s);
       });
 
+      const isIOS = () => {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      };
+
       const initializeAframeVideo = projectData => {
         loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
         .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
@@ -73,17 +77,10 @@
           video.setAttribute('playsinline', '');
           video.setAttribute('webkit-playsinline', '');
 
-          const sourceWebM = document.createElement('source');
-          sourceWebM.setAttribute('src', projectData.model_url);
-          sourceWebM.setAttribute('type', 'video/webm');
-
-          const sourceMP4 = document.createElement('source');
-          const mp4Url = projectData.model_url.replace(/\.webm$/i, '.mp4');
-          sourceMP4.setAttribute('src', mp4Url);
-          sourceMP4.setAttribute('type', 'video/mp4; codecs="hvc1"');
-
-          video.appendChild(sourceWebM);
-          video.appendChild(sourceMP4);
+          // Elegir src según compatibilidad
+          const webmURL = projectData.model_url;
+          const mp4URL = webmURL.replace(/\.webm$/i, '.mp4');
+          video.src = isIOS() ? mp4URL : webmURL;
 
           assets.appendChild(video);
           scene.appendChild(assets);
