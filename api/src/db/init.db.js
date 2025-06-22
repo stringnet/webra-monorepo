@@ -35,6 +35,7 @@ const initializeDatabase = async () => {
                 marker_type VARCHAR(50) NOT NULL,
                 marker_url VARCHAR(255),
                 marker_public_id VARCHAR(255),
+                chroma_key_color VARCHAR(7),
                 view_url VARCHAR(255) UNIQUE NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             );

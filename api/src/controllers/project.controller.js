@@ -17,7 +17,7 @@ export const getProjects = async (req, res) => {
 
 // Crear un nuevo proyecto (VERSIÓN CORREGIDA)
 export const createProject = async (req, res) => {
-    const { name, asset_type, model_url, marker_type, marker_url, model_public_id, marker_public_id } = req.body;
+    const { name, asset_type, model_url, marker_type, marker_url, model_public_id, marker_public_id, chroma_key_color } = req.body;
     const userId = req.user.id;
 
     if (marker_type === 'image' && !marker_url) {
@@ -52,8 +52,8 @@ export const createProject = async (req, res) => {
 
         // CORRECCIÓN: La consulta SQL ahora tiene el número correcto de columnas y valores.
         const newProject = await pool.query(
-            'INSERT INTO ar_projects (id, user_id, name, asset_type, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-            [projectId, userId, name, asset_type || 'model', model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id]
+            'INSERT INTO ar_projects (id, user_id, name, asset_type, model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id, chroma_key_color) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+            [projectId, userId, name, asset_type || 'model', model_url, marker_type, marker_url, view_url, model_public_id, marker_public_id, chroma_key_color]
         );
 
         res.status(201).json(newProject.rows[0]);
