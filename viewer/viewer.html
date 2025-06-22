@@ -51,6 +51,7 @@
                 loaderText.textContent = `Error: ${message}`;
                 const spinner = document.querySelector('.spinner');
                 if (spinner) spinner.style.display = 'none';
+                playButton.style.display = 'none';
             };
 
             function hexToRgbNorm(hex) {
@@ -88,14 +89,14 @@
 
             const initializeAframeVideo = (projectData) => {
                 clearContainer();
-
                 playButton.style.display = "block";
                 loader.classList.add('hidden');
 
                 playButton.onclick = () => {
                     playButton.style.display = "none";
                     loader.classList.remove('hidden');
-                    // Genera la escena SOLO tras dar play (así es seguro)
+                    // Debug info
+                    console.log("Play button clicked. Creating AR scene for video...");
                     setTimeout(() => {
                         const scene = document.createElement('a-scene');
                         scene.setAttribute('vr-mode-ui', 'enabled: false');
@@ -105,7 +106,7 @@
                         const assets = document.createElement('a-assets');
                         const videoAsset = document.createElement('video');
                         videoAsset.id = 'video-asset';
-                        videoAsset.setAttribute('src', projectData.model_url); // MP4 o WebM
+                        videoAsset.setAttribute('src', projectData.model_url);
                         videoAsset.setAttribute('loop', 'true');
                         videoAsset.setAttribute('autoplay', 'true');
                         videoAsset.setAttribute('muted', 'true');
@@ -142,17 +143,58 @@
                         scene.appendChild(document.createElement('a-camera'));
                         arContainer.appendChild(scene);
 
-                        // Esperar a que cargue escena y video (a veces video aún no está listo)
                         scene.addEventListener('loaded', () => {
                             loader.classList.add('hidden');
                             const video = document.getElementById('video-asset');
-                            if (video) {
-                                video.load();
-                                // El click ya desbloqueó el contexto, ahora sí reproducimos
-                                video.play().catch(() => {});
-                                marker.addEventListener('markerFound', () => video.play());
-                                marker.addEventListener('markerLost', () => video.pause());
+                            if (!video) {
+                                showError("No se encontró el elemento video.");
+                                return;
                             }
+                            // LOGS para debug:
+                            console.log("Video HTML element:", video);
+                            video.onloadedmetadata = function() {
+                                console.log("Video metadata loaded.");
+                                console.log("Video width:", video.videoWidth, "height:", video.videoHeight, "duration:", video.duration, "readyState:", video.readyState);
+                            };
+                            video.onerror = function(e) {
+                                showError("Error al cargar el video (¿problema de CORS o formato?).");
+                                console.error("Video error:", e);
+                            };
+                            video.onplay = function() {
+                                console.log("Video play event triggered.");
+                            };
+                            // Intenta reproducir el video explícitamente después de cargar
+                            video.load();
+                            video.play().then(() => {
+                                console.log("Video is playing. Trying to use it as texture...");
+                            }).catch((err) => {
+                                showError("No se puede reproducir el video: " + err.message);
+                                console.error("Play error:", err);
+                            });
+
+                            // DEBUG extra: ver si el video se puede pintar en canvas
+                            setTimeout(() => {
+                                try {
+                                    const canvas = document.createElement("canvas");
+                                    canvas.width = video.videoWidth || 320;
+                                    canvas.height = video.videoHeight || 240;
+                                    const ctx = canvas.getContext("2d");
+                                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                    // Prueba si realmente hay video visible
+                                    const imageData = ctx.getImageData(0,0,10,10);
+                                    console.log("Test: Video pudo pintarse en canvas. RGBA[0]:", imageData.data[0],imageData.data[1],imageData.data[2],imageData.data[3]);
+                                } catch(e) {
+                                    console.warn("NO se puede usar el video como textura/canvas. Error:", e);
+                                    showError("El video no puede usarse como textura (incompatible para RA WebGL). Prueba con un video WebM VP8 y asegúrate de tener CORS habilitado.");
+                                }
+                            }, 1500);
+
+                            marker.addEventListener('markerFound', () => {
+                                video.play().catch(() => {});
+                            });
+                            marker.addEventListener('markerLost', () => {
+                                video.pause();
+                            });
                         });
                     }, 200);
                 };
