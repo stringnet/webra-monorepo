@@ -28,6 +28,8 @@
         }
         #playButton:hover { background: #1867b7; }
         #playButton:active { background: #10417a; }
+        #controls { position:absolute; bottom:2em; left:50%; transform:translateX(-50%); z-index:20; }
+        #controls button { font-size:1.2em; padding: 0.5em 1em; margin:0 0.5em; }
         #hidden-canvas, #video-asset { display: none; }
     </style>
 </head>
@@ -38,7 +40,10 @@
     </div>
     <div id="ar-container" class="container"></div>
     <button id="playButton" style="display:none;">▶ Play Video</button>
-    <!-- Elementos canvas/video para chroma key -->
+    <div id="controls" style="display:none;">
+        <button id="muteBtn">🔇/🔊</button>
+        <button id="pauseBtn">⏸/▶️</button>
+    </div>
     <video id="video-asset" playsinline crossorigin="anonymous" muted loop></video>
     <canvas id="hidden-canvas"></canvas>
 
@@ -49,6 +54,9 @@
             const loader = document.getElementById('loader');
             const loaderText = document.getElementById('loader-text');
             const playButton = document.getElementById('playButton');
+            const controls = document.getElementById('controls');
+            const muteBtn = document.getElementById('muteBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
             const video = document.getElementById('video-asset');
             const hiddenCanvas = document.getElementById('hidden-canvas');
             const ctx = hiddenCanvas.getContext('2d');
@@ -58,6 +66,7 @@
                 const spinner = document.querySelector('.spinner');
                 if (spinner) spinner.style.display = 'none';
                 playButton.style.display = 'none';
+                controls.style.display = 'none';
             };
 
             function hexToRgb(hex) {
@@ -79,6 +88,7 @@
             const initializeModelViewer = (projectData) => {
                 clearContainer();
                 playButton.style.display = "none";
+                controls.style.display = "none";
                 const modelViewer = document.createElement('model-viewer');
                 modelViewer.setAttribute('src', projectData.model_url);
                 modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
@@ -99,6 +109,7 @@
                 clearContainer();
                 loader.classList.add('hidden');
                 playButton.style.display = "block";
+                controls.style.display = "none";
 
                 playButton.onclick = () => {
                     playButton.style.display = "none";
@@ -106,6 +117,7 @@
 
                     // -- PREPARA VIDEO Y CANVAS
                     video.src = projectData.model_url;
+                    video.crossOrigin = "anonymous";
                     video.load();
 
                     video.onloadeddata = function() {
@@ -152,6 +164,13 @@
                         const chromaRGB = hexToRgb(chromaKeyColor);
                         const chromaThreshold = projectData.chroma_key_threshold || 80;
 
+                        // Control mute/pause
+                        controls.style.display = "block";
+                        muteBtn.textContent = video.muted ? "🔇" : "🔊";
+                        pauseBtn.textContent = video.paused ? "▶️" : "⏸";
+                        muteBtn.onclick = () => { video.muted = !video.muted; muteBtn.textContent = video.muted ? "🔇" : "🔊"; };
+                        pauseBtn.onclick = () => { if (video.paused) { video.play(); pauseBtn.textContent = "⏸"; } else { video.pause(); pauseBtn.textContent = "▶️"; } };
+
                         function drawChromaFrame() {
                             if (video.paused || video.ended) return;
                             ctx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
@@ -170,7 +189,8 @@
                                 }
                             }
                             ctx.putImageData(frame, 0, 0);
-                            img.src = hiddenCanvas.toDataURL("image/png");
+                            // Forzamos que la textura se refresque (nuevo objeto dataURL)
+                            img.src = hiddenCanvas.toDataURL("image/png") + "?" + Date.now();
                             requestAnimationFrame(drawChromaFrame);
                         }
 
@@ -181,7 +201,6 @@
                             showError("No se pudo reproducir el video: " + err.message);
                         });
 
-                        // Marker events para pausar/reanudar video
                         marker.addEventListener('markerFound', () => { video.play(); });
                         marker.addEventListener('markerLost', () => { video.pause(); });
                     };
