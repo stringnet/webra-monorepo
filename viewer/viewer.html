@@ -2,234 +2,160 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <title>Visualizador AR - WebRA PRO</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador de RA - WebRA</title>
+    <!-- Librerías necesarias -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-chromakey-material@^1.0.0/dist/aframe-chromakey-material.min.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
-        .container { position: relative; width: 100vw; height: 100vh; }
-        .overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
-            background-color: rgba(0, 0, 0, 0.8); color: white; z-index: 2; }
-        .overlay p { font-size: 1.2rem; max-width: 80%; margin: 10px 0; }
-        .overlay.hidden { display: none; }
-        .spinner { border: 5px solid #444; border-top: 5px solid #fff; border-radius: 50%;
-            width: 50px; height: 50px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        model-viewer { width: 100%; height: 100%; }
-        #ar-scene { width: 100%; height: 100%; }
+        body {margin: 0; overflow: hidden;}
         #playButton {
             position: absolute; z-index: 10; left: 50%; top: 50%; transform: translate(-50%, -50%);
             padding: 20px 35px; font-size: 1.5rem; border: none; border-radius: 12px; background: #2e88f8;
             color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1);
-            transition: background .2s;
         }
-        #playButton:hover { background: #1867b7; }
         #playButton:active { background: #10417a; }
-        #controls { position:absolute; bottom:2em; left:50%; transform:translateX(-50%); z-index:20; }
-        #controls button { font-size:1.2em; padding: 0.5em 1em; margin:0 0.5em; }
-        #hidden-canvas, #video-asset { display: none; }
+        .overlay {
+            position: absolute; top:0; left:0; right:0; bottom:0;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20;
+            background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;
+        }
+        .hidden {display:none;}
+        model-viewer { width: 100vw; height: 100vh; }
     </style>
 </head>
 <body>
     <div id="loader" class="overlay">
-        <div class="spinner"></div>
-        <p id="loader-text">Cargando proyecto...</p>
+        <div style="margin-bottom:18px">Cargando proyecto...</div>
+        <div class="spinner" style="border:5px solid #444;border-top:5px solid #fff;width:40px;height:40px;border-radius:50%;animation:spin 1s linear infinite"></div>
     </div>
-    <div id="ar-container" class="container"></div>
     <button id="playButton" style="display:none;">▶ Play Video</button>
-    <div id="controls" style="display:none;">
-        <button id="muteBtn">🔇/🔊</button>
-        <button id="pauseBtn">⏸/▶️</button>
-    </div>
-    <video id="video-asset" playsinline crossorigin="anonymous" muted loop></video>
-    <canvas id="hidden-canvas"></canvas>
+    <div id="ar-container"></div>
 
     <script>
-        // Componente A-Frame para usar el canvas como textura directa en a-plane
-        AFRAME.registerComponent('canvas-texture', {
-            schema: {type: 'selector'}, // recibe el canvas como selector
-            init: function () {
-                this.texture = new THREE.Texture(this.data);
-                this.texture.needsUpdate = true;
-                this.el.getObject3D('mesh').material.map = this.texture;
-                this.el.getObject3D('mesh').material.transparent = true;
-            },
-            tick: function () {
-                this.texture.needsUpdate = true;
-            }
-        });
+        // Utilidad para convertir #00FF00 a "0,1,0"
+        function hexToRGBString(hex) {
+            hex = hex.replace(/^#/, '');
+            if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+            const num = parseInt(hex, 16);
+            return [
+                ((num >> 16) & 255) / 255,
+                ((num >> 8) & 255) / 255,
+                (num & 255) / 255
+            ].map(x => x.toFixed(2)).join(',');
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
-            const arContainer = document.getElementById('ar-container');
             const loader = document.getElementById('loader');
-            const loaderText = document.getElementById('loader-text');
+            const arContainer = document.getElementById('ar-container');
             const playButton = document.getElementById('playButton');
-            const controls = document.getElementById('controls');
-            const muteBtn = document.getElementById('muteBtn');
-            const pauseBtn = document.getElementById('pauseBtn');
-            const video = document.getElementById('video-asset');
-            const hiddenCanvas = document.getElementById('hidden-canvas');
-            const ctx = hiddenCanvas.getContext('2d');
 
-            const showError = (message) => {
-                loaderText.textContent = `Error: ${message}`;
-                const spinner = document.querySelector('.spinner');
-                if (spinner) spinner.style.display = 'none';
-                playButton.style.display = 'none';
-                controls.style.display = 'none';
+            const showError = msg => {
+                loader.innerHTML = `<div style="color:red;">${msg}</div>`;
+                loader.classList.remove('hidden');
             };
 
-            function hexToRgb(hex) {
-                hex = hex.replace(/^#/, '');
-                if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
-                const num = parseInt(hex, 16);
-                return {
-                    r: (num >> 16) & 255,
-                    g: (num >> 8) & 255,
-                    b: num & 255
-                };
-            }
-
-            function clearContainer() {
-                arContainer.innerHTML = "";
-            }
-
-            // MODELO 3D
-            const initializeModelViewer = (projectData) => {
-                clearContainer();
-                playButton.style.display = "none";
-                controls.style.display = "none";
-                const modelViewer = document.createElement('model-viewer');
-                modelViewer.setAttribute('src', projectData.model_url);
-                modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
-                modelViewer.setAttribute('ar', '');
-                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
-                modelViewer.setAttribute('camera-controls', '');
-                modelViewer.setAttribute('enable-pan', '');
-                modelViewer.setAttribute('autoplay', '');
-                modelViewer.setAttribute('crossorigin', 'anonymous');
-                arContainer.appendChild(modelViewer);
-
-                modelViewer.addEventListener('load', () => loader.classList.add('hidden'));
-                modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
-            };
-
-            // VIDEO CON CHROMA KEY
-            const initializeAframeVideo = (projectData) => {
-                clearContainer();
-                loader.classList.add('hidden');
-                playButton.style.display = "block";
-                controls.style.display = "none";
-
-                playButton.onclick = () => {
-                    playButton.style.display = "none";
-                    loader.classList.remove('hidden');
-
-                    video.src = projectData.model_url;
-                    video.crossOrigin = "anonymous";
-                    video.load();
-
-                    video.onloadeddata = function() {
-                        loader.classList.add('hidden');
-                        hiddenCanvas.width = video.videoWidth;
-                        hiddenCanvas.height = video.videoHeight;
-
-                        // Crea la escena AR
-                        const scene = document.createElement('a-scene');
-                        scene.setAttribute('vr-mode-ui', 'enabled: false');
-                        scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                        scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-
-                        const marker = document.createElement('a-marker');
-                        if(projectData.marker_type === 'image' && projectData.marker_url) {
-                            marker.setAttribute('type', 'pattern');
-                            marker.setAttribute('url', projectData.marker_url);
-                        } else {
-                            marker.setAttribute('preset', 'hiro'); 
-                        }
-                        marker.setAttribute('emitevents', 'true');
-
-                        // a-plane que usará el canvas como textura directa
-                        const aPlane = document.createElement('a-plane');
-                        aPlane.setAttribute('width', '1.6');
-                        aPlane.setAttribute('height', '0.9');
-                        aPlane.setAttribute('rotation', '-90 0 0');
-                        aPlane.setAttribute('canvas-texture', '#hidden-canvas');
-                        marker.appendChild(aPlane);
-
-                        scene.appendChild(marker);
-                        scene.appendChild(document.createElement('a-camera'));
-                        arContainer.appendChild(scene);
-
-                        // --- CHROMA KEY EN CANVAS ---
-                        const chromaKeyColor = projectData.chroma_key_color || '#00FF00';
-                        const chromaRGB = hexToRgb(chromaKeyColor);
-                        const chromaThreshold = projectData.chroma_key_threshold || 80;
-
-                        controls.style.display = "block";
-                        muteBtn.textContent = video.muted ? "🔇" : "🔊";
-                        pauseBtn.textContent = video.paused ? "▶️" : "⏸";
-                        muteBtn.onclick = () => { video.muted = !video.muted; muteBtn.textContent = video.muted ? "🔇" : "🔊"; };
-                        pauseBtn.onclick = () => { if (video.paused) { video.play(); pauseBtn.textContent = "⏸"; } else { video.pause(); pauseBtn.textContent = "▶️"; } };
-
-                        function drawChromaFrame() {
-                            if (video.paused || video.ended) return;
-                            ctx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-                            const frame = ctx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-                            const l = frame.data.length / 4;
-                            for (let i = 0; i < l; i++) {
-                                const r = frame.data[i*4+0];
-                                const g = frame.data[i*4+1];
-                                const b = frame.data[i*4+2];
-                                if (
-                                    Math.abs(r - chromaRGB.r) < chromaThreshold &&
-                                    Math.abs(g - chromaRGB.g) < chromaThreshold &&
-                                    Math.abs(b - chromaRGB.b) < chromaThreshold
-                                ) {
-                                    frame.data[i*4+3] = 0; // alpha
-                                }
-                            }
-                            ctx.putImageData(frame, 0, 0);
-                            requestAnimationFrame(drawChromaFrame);
-                        }
-
-                        video.play().then(() => {
-                            drawChromaFrame();
-                        }).catch(err => {
-                            showError("No se pudo reproducir el video: " + err.message);
-                        });
-
-                        marker.addEventListener('markerFound', () => { video.play(); });
-                        marker.addEventListener('markerLost', () => { video.pause(); });
-                    };
-                };
-            };
-
-            const initialize = async () => {
+            // --- MAIN FLOW ---
+            (async function(){
                 try {
+                    // Extraer el projectId dinámicamente de la URL
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
                     if (!projectId) throw new Error("ID de proyecto no encontrado.");
 
+                    // Fetch de la API de tu backend
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
-                    
                     const projectData = await response.json();
-                    if (projectData.asset_type === 'video') {
-                        initializeAframeVideo(projectData);
-                    } else { // 'model' es el default
-                        initializeModelViewer(projectData);
-                    }
-                } catch (error) {
-                    showError(error.message);
-                }
-            };
 
-            initialize();
+                    // --- CARGA DINÁMICA DE VIDEO CON CHROMA ---
+                    if (projectData.asset_type === 'video') {
+                        loader.classList.add('hidden');
+                        playButton.style.display = "block";
+
+                        playButton.onclick = function() {
+                            playButton.style.display = "none";
+                            loader.classList.remove('hidden');
+                            // Limpiar antes de inyectar
+                            arContainer.innerHTML = "";
+
+                            // Crear la escena
+                            const scene = document.createElement('a-scene');
+                            scene.setAttribute('embedded', '');
+                            scene.setAttribute('vr-mode-ui', 'enabled: false');
+                            scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                            scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+
+                            // Assets: el video
+                            const assets = document.createElement('a-assets');
+                            const videoAsset = document.createElement('video');
+                            videoAsset.setAttribute('id', 'videoChroma');
+                            videoAsset.setAttribute('src', projectData.model_url);
+                            videoAsset.setAttribute('loop', 'true');
+                            videoAsset.setAttribute('crossorigin', 'anonymous');
+                            videoAsset.setAttribute('webkit-playsinline', '');
+                            videoAsset.setAttribute('playsinline', '');
+                            videoAsset.setAttribute('preload', 'auto');
+                            assets.appendChild(videoAsset);
+                            scene.appendChild(assets);
+
+                            // El marker
+                            const marker = document.createElement('a-marker');
+                            if(projectData.marker_type === 'image' && projectData.marker_url) {
+                                marker.setAttribute('type', 'pattern');
+                                marker.setAttribute('url', projectData.marker_url);
+                            } else {
+                                marker.setAttribute('preset', 'hiro'); 
+                            }
+                            marker.setAttribute('emitevents', 'true');
+
+                            // El color chroma desde base de datos
+                            const chromaColor = projectData.chroma_key_color || '#00FF00';
+                            const chromaRGB = hexToRGBString(chromaColor);
+
+                            // Plano con shader de chroma
+                            const plane = document.createElement('a-plane');
+                            plane.setAttribute('width', '1.6');
+                            plane.setAttribute('height', '0.9');
+                            plane.setAttribute('rotation', '-90 0 0');
+                            plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
+
+                            marker.appendChild(plane);
+                            scene.appendChild(marker);
+                            scene.appendChild(document.createElement('a-camera'));
+                            arContainer.appendChild(scene);
+
+                            // Esperar a que el video esté listo
+                            const videoElem = assets.querySelector('#videoChroma');
+                            videoElem.addEventListener('loadeddata', function() {
+                                loader.classList.add('hidden');
+                                videoElem.play();
+                            });
+                        };
+                    }
+                    // --- CARGA DE MODELO 3D ---
+                    else {
+                        loader.classList.add('hidden');
+                        arContainer.innerHTML = "";
+                        const modelViewer = document.createElement('model-viewer');
+                        modelViewer.setAttribute('src', projectData.model_url);
+                        modelViewer.setAttribute('ar', '');
+                        modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
+                        modelViewer.setAttribute('camera-controls', '');
+                        modelViewer.setAttribute('enable-pan', '');
+                        modelViewer.setAttribute('autoplay', '');
+                        modelViewer.setAttribute('crossorigin', 'anonymous');
+                        modelViewer.style.width = "100vw";
+                        modelViewer.style.height = "100vh";
+                        arContainer.appendChild(modelViewer);
+                    }
+                } catch(err) {
+                    showError("ERROR: " + err.message);
+                }
+            })();
         });
     </script>
 </body>
