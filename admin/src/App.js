@@ -178,7 +178,7 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
         <div className="bg-blue-100 p-4 rounded-full">{icon}</div>
     </div>
 );
-const MarketingIdeasModal = ({ project, onClose }) => { return null };
+const MarketingIdeasModal = ({ project, onClose }) => { return null; };
 const QRCodeModal = ({ url, onClose }) => {
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
     return (
@@ -214,8 +214,9 @@ const FileInput = ({ label, onFileSelect, status, fileName, accept }) => (
 );
 const CreateProjectModal = ({ onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
-    const [assetType, setAssetType] = useState('model'); // Nuevo estado
+    const [assetType, setAssetType] = useState('model');
     const [markerType, setMarkerType] = useState('image');
+    const [chromaColor, setChromaColor] = useState('#00ff00');
     const [assetFile, setAssetFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [markerFile, setMarkerFile] = useState({ file: null, url: null, public_id: null, status: 'idle' });
     const [error, setError] = useState('');
@@ -248,12 +249,13 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
         setLoading(true);
         const projectData = {
             name,
-            asset_type: assetType, // <-- Enviar el nuevo tipo
+            asset_type: assetType,
             model_url: assetFile.url,
             marker_type: markerType,
             marker_url: isMarkerRequired ? markerFile.url : null,
             model_public_id: assetFile.public_id,
             marker_public_id: isMarkerRequired ? markerFile.public_id : null,
+            chroma_key_color: assetType === 'video' ? chromaColor : null,
         };
         try {
             const token = localStorage.getItem('webar_token');
@@ -281,15 +283,21 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                             <label htmlFor="asset_type" className="block text-sm font-medium text-gray-700">Tipo de Contenido</label>
                             <select id="asset_type" value={assetType} onChange={(e) => setAssetType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm">
                                 <option value="model">Modelo 3D</option>
-                                <option value="video">Video</option>
+                                <option value="video">Video (Chroma Key)</option>
                             </select>
                         </div>
+                        {assetType === 'video' && (
+                             <div>
+                                <label htmlFor="chroma_color" className="block text-sm font-medium text-gray-700">Color de fondo a eliminar</label>
+                                <input type="color" id="chroma_color" value={chromaColor} onChange={(e) => setChromaColor(e.target.value)} className="mt-1 w-full h-10 p-1 border border-gray-300 rounded-md" />
+                            </div>
+                        )}
                         <FileInput 
-                            label={assetType === 'model' ? "Modelo 3D" : "Video con transparencia"}
+                            label={assetType === 'model' ? "Modelo 3D" : "Video con fondo de color"}
                             onFileSelect={(file) => handleFileChange(file, 'asset')} 
                             status={assetFile.status} 
                             fileName={assetFile.file?.name}
-                            accept={assetType === 'model' ? ".glb,.gltf" : ".webm,.mp4"}
+                            accept={assetType === 'model' ? ".glb,.gltf" : ".mp4,.mov,.avi"}
                         />
                          <div>
                             <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
