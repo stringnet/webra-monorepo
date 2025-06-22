@@ -286,12 +286,6 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                                 <option value="video">Video (Chroma Key)</option>
                             </select>
                         </div>
-                        {assetType === 'video' && (
-                             <div>
-                                <label htmlFor="chroma_color" className="block text-sm font-medium text-gray-700">Color de fondo a eliminar</label>
-                                <input type="color" id="chroma_color" value={chromaColor} onChange={(e) => setChromaColor(e.target.value)} className="mt-1 w-full h-10 p-1 border border-gray-300 rounded-md" />
-                            </div>
-                        )}
                         <FileInput 
                             label={assetType === 'model' ? "Modelo 3D" : "Video con fondo de color"}
                             onFileSelect={(file) => handleFileChange(file, 'asset')} 
@@ -299,6 +293,12 @@ const CreateProjectModal = ({ onClose, onProjectCreated }) => {
                             fileName={assetFile.file?.name}
                             accept={assetType === 'model' ? ".glb,.gltf" : ".mp4,.mov,.avi"}
                         />
+                        {assetType === 'video' && (
+                             <div>
+                                <label htmlFor="chroma_color" className="block text-sm font-medium text-gray-700">Color de fondo a eliminar</label>
+                                <input type="color" id="chroma_color" value={chromaColor} onChange={(e) => setChromaColor(e.target.value)} className="mt-1 w-full h-10 p-1 border border-gray-300 rounded-md" />
+                            </div>
+                        )}
                          <div>
                             <label htmlFor="marker_type" className="block text-sm font-medium text-gray-700">Tipo de Marcador</label>
                             <select id="marker_type" value={markerType} onChange={(e) => setMarkerType(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm">
