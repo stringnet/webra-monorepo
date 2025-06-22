@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- NOTA: Las librerías se cargarán dinámicamente con JavaScript -->
+    <!-- CORRECCIÓN: Se cargan los scripts estáticamente en el head para asegurar el orden -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 
     <style>
         body { 
@@ -84,95 +88,71 @@
                 if (spinner) spinner.style.display = 'none';
             };
 
-            const loadScript = (src, isModule = false) => {
-                return new Promise((resolve, reject) => {
-                    if (document.querySelector(`script[src="${src}"]`)) {
-                        resolve(); return;
-                    }
-                    const script = document.createElement('script');
-                    script.src = src;
-                    if (isModule) script.type = "module";
-                    script.onload = resolve;
-                    script.onerror = () => reject(new Error(`No se pudo cargar el script: ${src}`));
-                    document.head.appendChild(script);
-                });
-            };
-
             const initializeModelViewer = (projectData) => {
-                loadScript('https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js', true)
-                    .then(() => {
-                        const modelViewer = document.createElement('model-viewer');
-                        modelViewer.setAttribute('src', projectData.model_url);
-                        modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
-                        modelViewer.setAttribute('ar', '');
-                        modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
-                        modelViewer.setAttribute('camera-controls', '');
-                        modelViewer.setAttribute('enable-pan', '');
-                        modelViewer.setAttribute('autoplay', '');
-                        modelViewer.setAttribute('crossorigin', 'anonymous');
+                const modelViewer = document.createElement('model-viewer');
+                modelViewer.setAttribute('src', projectData.model_url);
+                modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
+                modelViewer.setAttribute('ar', '');
+                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
+                modelViewer.setAttribute('camera-controls', '');
+                modelViewer.setAttribute('enable-pan', '');
+                modelViewer.setAttribute('autoplay', '');
+                modelViewer.setAttribute('crossorigin', 'anonymous');
 
-                        arContainer.appendChild(modelViewer);
+                arContainer.appendChild(modelViewer);
 
-                        modelViewer.addEventListener('load', () => loader.classList.add('hidden'));
-                        modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
-                    })
-                    .catch((err) => showError(err.message));
+                modelViewer.addEventListener('load', () => loader.classList.add('hidden'));
+                modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
             };
 
             const initializeAframeVideo = (projectData) => {
-                // CORRECCIÓN: Cargar scripts en secuencia para evitar errores de tiempo.
-                loadScript('https://aframe.io/releases/1.5.0/aframe.min.js')
-                .then(() => loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'))
-                .then(() => loadScript('https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js'))
-                .then(() => {
-                    // Ahora que todas las librerías están cargadas en orden, construimos la escena.
-                    const scene = document.createElement('a-scene');
-                    scene.setAttribute('vr-mode-ui', 'enabled: false');
-                    scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                    scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+                const scene = document.createElement('a-scene');
+                scene.setAttribute('vr-mode-ui', 'enabled: false');
+                scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
-                    const assets = document.createElement('a-assets');
-                    const videoAsset = document.createElement('video');
-                    videoAsset.id = 'video-asset';
-                    videoAsset.setAttribute('src', projectData.model_url);
-                    videoAsset.setAttribute('loop', 'true');
-                    videoAsset.setAttribute('autoplay', 'true');
-                    videoAsset.setAttribute('muted', 'true');
-                    videoAsset.setAttribute('crossorigin', 'anonymous');
-                    videoAsset.setAttribute('playsinline', 'true');
-                    videoAsset.setAttribute('webkit-playsinline', 'true');
-                    assets.appendChild(videoAsset);
-                    scene.appendChild(assets);
+                const assets = document.createElement('a-assets');
+                const videoAsset = document.createElement('video');
+                videoAsset.id = 'video-asset';
+                videoAsset.setAttribute('src', projectData.model_url);
+                videoAsset.setAttribute('loop', 'true');
+                videoAsset.setAttribute('autoplay', 'true');
+                videoAsset.setAttribute('muted', 'true');
+                videoAsset.setAttribute('crossorigin', 'anonymous');
+                videoAsset.setAttribute('playsinline', 'true');
+                videoAsset.setAttribute('webkit-playsinline', 'true');
+                assets.appendChild(videoAsset);
+                scene.appendChild(assets);
 
-                    const marker = document.createElement('a-marker');
-                    
-                    if(projectData.marker_type === 'image' && projectData.marker_url) {
-                        marker.setAttribute('type', 'pattern');
-                        marker.setAttribute('url', projectData.marker_url);
-                    } else {
-                        marker.setAttribute('preset', 'hiro'); 
-                    }
-                    marker.setAttribute('emitevents', 'true');
+                const marker = document.createElement('a-marker');
+                
+                if(projectData.marker_type === 'image' && projectData.marker_url) {
+                    marker.setAttribute('type', 'pattern');
+                    marker.setAttribute('url', projectData.marker_url);
+                } else {
+                    marker.setAttribute('preset', 'hiro'); 
+                }
+                marker.setAttribute('emitevents', 'true');
 
-                    const videoPlane = document.createElement('a-plane');
-                    videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
-                    videoPlane.setAttribute('width', '1.6');
-                    videoPlane.setAttribute('height', '0.9');
-                    videoPlane.setAttribute('rotation', '-90 0 0');
-                    
-                    marker.appendChild(videoPlane);
-                    scene.appendChild(marker);
-                    scene.appendChild(document.createElement('a-camera'));
-                    arContainer.appendChild(scene);
+                const videoPlane = document.createElement('a-plane');
+                // Usamos el shader que ahora está garantizado que existe
+                videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
+                videoPlane.setAttribute('width', '1.6');
+                videoPlane.setAttribute('height', '0.9');
+                videoPlane.setAttribute('rotation', '-90 0 0');
+                
+                marker.appendChild(videoPlane);
+                scene.appendChild(marker);
+                scene.appendChild(document.createElement('a-camera'));
+                arContainer.appendChild(scene);
 
-                    scene.addEventListener('loaded', () => {
-                        loader.classList.add('hidden');
-                        const video = document.getElementById('video-asset');
-                        video.play().catch(() => {});
-                        marker.addEventListener('markerFound', () => video.play());
-                        marker.addEventListener('markerLost', () => video.pause());
-                    });
-                }).catch((err) => showError(err.message));
+                scene.addEventListener('loaded', () => {
+                    loader.classList.add('hidden');
+                    const video = document.getElementById('video-asset');
+                    video.play().catch(() => {});
+                    marker.addEventListener('markerFound', () => video.play());
+                    marker.addEventListener('markerLost', () => video.pause());
+                });
             };
 
             const initialize = async () => {
