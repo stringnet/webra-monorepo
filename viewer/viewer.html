@@ -6,7 +6,6 @@
     <title>Visualizador de RA - WebRA</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
@@ -29,6 +28,7 @@
         }
         #playButton:hover { background: #1867b7; }
         #playButton:active { background: #10417a; }
+        #hidden-canvas, #video-asset { display: none; }
     </style>
 </head>
 <body>
@@ -38,6 +38,9 @@
     </div>
     <div id="ar-container" class="container"></div>
     <button id="playButton" style="display:none;">▶ Play Video</button>
+    <!-- Elementos canvas/video para chroma key -->
+    <video id="video-asset" playsinline crossorigin="anonymous" muted loop></video>
+    <canvas id="hidden-canvas"></canvas>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -46,6 +49,9 @@
             const loader = document.getElementById('loader');
             const loaderText = document.getElementById('loader-text');
             const playButton = document.getElementById('playButton');
+            const video = document.getElementById('video-asset');
+            const hiddenCanvas = document.getElementById('hidden-canvas');
+            const ctx = hiddenCanvas.getContext('2d');
 
             const showError = (message) => {
                 loaderText.textContent = `Error: ${message}`;
@@ -54,21 +60,22 @@
                 playButton.style.display = 'none';
             };
 
-            function hexToRgbNorm(hex) {
+            function hexToRgb(hex) {
                 hex = hex.replace(/^#/, '');
                 if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
                 const num = parseInt(hex, 16);
-                return [
-                    ((num >> 16) & 255) / 255,
-                    ((num >> 8) & 255) / 255,
-                    (num & 255) / 255
-                ].map(x => Math.round(x * 100) / 100).join(',');
+                return {
+                    r: (num >> 16) & 255,
+                    g: (num >> 8) & 255,
+                    b: num & 255
+                };
             }
 
             function clearContainer() {
                 arContainer.innerHTML = "";
             }
 
+            // MODELO 3D
             const initializeModelViewer = (projectData) => {
                 clearContainer();
                 playButton.style.display = "none";
@@ -87,33 +94,36 @@
                 modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
             };
 
+            // VIDEO CON CHROMA KEY
             const initializeAframeVideo = (projectData) => {
                 clearContainer();
-                playButton.style.display = "block";
                 loader.classList.add('hidden');
+                playButton.style.display = "block";
 
                 playButton.onclick = () => {
                     playButton.style.display = "none";
                     loader.classList.remove('hidden');
-                    // Debug info
-                    console.log("Play button clicked. Creating AR scene for video...");
-                    setTimeout(() => {
+
+                    // -- PREPARA VIDEO Y CANVAS
+                    video.src = projectData.model_url;
+                    video.load();
+
+                    video.onloadeddata = function() {
+                        loader.classList.add('hidden');
+                        hiddenCanvas.width = video.videoWidth;
+                        hiddenCanvas.height = video.videoHeight;
+
+                        // Crea la escena AR
                         const scene = document.createElement('a-scene');
                         scene.setAttribute('vr-mode-ui', 'enabled: false');
                         scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                         scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-
                         const assets = document.createElement('a-assets');
-                        const videoAsset = document.createElement('video');
-                        videoAsset.id = 'video-asset';
-                        videoAsset.setAttribute('src', projectData.model_url);
-                        videoAsset.setAttribute('loop', 'true');
-                        videoAsset.setAttribute('autoplay', 'true');
-                        videoAsset.setAttribute('muted', 'true');
-                        videoAsset.setAttribute('crossorigin', 'anonymous');
-                        videoAsset.setAttribute('playsinline', 'true');
-                        videoAsset.setAttribute('webkit-playsinline', 'true');
-                        assets.appendChild(videoAsset);
+                        // Creamos una textura base blanca por defecto
+                        const img = document.createElement('img');
+                        img.id = "canvas-texture";
+                        img.src = hiddenCanvas.toDataURL();
+                        assets.appendChild(img);
                         scene.appendChild(assets);
 
                         const marker = document.createElement('a-marker');
@@ -125,78 +135,56 @@
                         }
                         marker.setAttribute('emitevents', 'true');
 
-                        const chromaColor = projectData.chroma_key_color || '#00FF00';
-                        const chromaNorm = hexToRgbNorm(chromaColor);
-                        const chromaThreshold = projectData.chroma_key_threshold || '0.3';
-
-                        const videoPlane = document.createElement('a-plane');
-                        videoPlane.setAttribute('shader', 'transparent-video');
-                        videoPlane.setAttribute('src', '#video-asset');
-                        videoPlane.setAttribute('color', chromaNorm);
-                        videoPlane.setAttribute('threshold', chromaThreshold);
-                        videoPlane.setAttribute('width', '1.6');
-                        videoPlane.setAttribute('height', '0.9');
-                        videoPlane.setAttribute('rotation', '-90 0 0');
-                        marker.appendChild(videoPlane);
-
+                        // a-image que mostrará la textura dinámica
+                        const aImage = document.createElement('a-image');
+                        aImage.setAttribute('id', 'video-chroma');
+                        aImage.setAttribute('src', '#canvas-texture');
+                        aImage.setAttribute('width', '1.6');
+                        aImage.setAttribute('height', '0.9');
+                        aImage.setAttribute('rotation', '-90 0 0');
+                        marker.appendChild(aImage);
                         scene.appendChild(marker);
                         scene.appendChild(document.createElement('a-camera'));
                         arContainer.appendChild(scene);
 
-                        scene.addEventListener('loaded', () => {
-                            loader.classList.add('hidden');
-                            const video = document.getElementById('video-asset');
-                            if (!video) {
-                                showError("No se encontró el elemento video.");
-                                return;
-                            }
-                            // LOGS para debug:
-                            console.log("Video HTML element:", video);
-                            video.onloadedmetadata = function() {
-                                console.log("Video metadata loaded.");
-                                console.log("Video width:", video.videoWidth, "height:", video.videoHeight, "duration:", video.duration, "readyState:", video.readyState);
-                            };
-                            video.onerror = function(e) {
-                                showError("Error al cargar el video (¿problema de CORS o formato?).");
-                                console.error("Video error:", e);
-                            };
-                            video.onplay = function() {
-                                console.log("Video play event triggered.");
-                            };
-                            // Intenta reproducir el video explícitamente después de cargar
-                            video.load();
-                            video.play().then(() => {
-                                console.log("Video is playing. Trying to use it as texture...");
-                            }).catch((err) => {
-                                showError("No se puede reproducir el video: " + err.message);
-                                console.error("Play error:", err);
-                            });
+                        // --- CHROMA KEY EN CANVAS ---
+                        const chromaKeyColor = projectData.chroma_key_color || '#00FF00';
+                        const chromaRGB = hexToRgb(chromaKeyColor);
+                        const chromaThreshold = projectData.chroma_key_threshold || 80;
 
-                            // DEBUG extra: ver si el video se puede pintar en canvas
-                            setTimeout(() => {
-                                try {
-                                    const canvas = document.createElement("canvas");
-                                    canvas.width = video.videoWidth || 320;
-                                    canvas.height = video.videoHeight || 240;
-                                    const ctx = canvas.getContext("2d");
-                                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                                    // Prueba si realmente hay video visible
-                                    const imageData = ctx.getImageData(0,0,10,10);
-                                    console.log("Test: Video pudo pintarse en canvas. RGBA[0]:", imageData.data[0],imageData.data[1],imageData.data[2],imageData.data[3]);
-                                } catch(e) {
-                                    console.warn("NO se puede usar el video como textura/canvas. Error:", e);
-                                    showError("El video no puede usarse como textura (incompatible para RA WebGL). Prueba con un video WebM VP8 y asegúrate de tener CORS habilitado.");
+                        function drawChromaFrame() {
+                            if (video.paused || video.ended) return;
+                            ctx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                            const frame = ctx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                            const l = frame.data.length / 4;
+                            for (let i = 0; i < l; i++) {
+                                const r = frame.data[i*4+0];
+                                const g = frame.data[i*4+1];
+                                const b = frame.data[i*4+2];
+                                if (
+                                    Math.abs(r - chromaRGB.r) < chromaThreshold &&
+                                    Math.abs(g - chromaRGB.g) < chromaThreshold &&
+                                    Math.abs(b - chromaRGB.b) < chromaThreshold
+                                ) {
+                                    frame.data[i*4+3] = 0; // alpha
                                 }
-                            }, 1500);
+                            }
+                            ctx.putImageData(frame, 0, 0);
+                            img.src = hiddenCanvas.toDataURL("image/png");
+                            requestAnimationFrame(drawChromaFrame);
+                        }
 
-                            marker.addEventListener('markerFound', () => {
-                                video.play().catch(() => {});
-                            });
-                            marker.addEventListener('markerLost', () => {
-                                video.pause();
-                            });
+                        // PLAY después de interacción usuario (compatibilidad mobile)
+                        video.play().then(() => {
+                            drawChromaFrame();
+                        }).catch(err => {
+                            showError("No se pudo reproducir el video: " + err.message);
                         });
-                    }, 200);
+
+                        // Marker events para pausar/reanudar video
+                        marker.addEventListener('markerFound', () => { video.play(); });
+                        marker.addEventListener('markerLost', () => { video.pause(); });
+                    };
                 };
             };
 
