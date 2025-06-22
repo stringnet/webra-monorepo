@@ -4,31 +4,76 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
+    
+    <!-- Se cargan los scripts estáticamente en el head para asegurar el orden correcto -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+
     <style>
-        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
-        .container { position: relative; width: 100vw; height: 100vh; }
-        .overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-          display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
-          background-color: rgba(0, 0, 0, 0.8); color: white; z-index: 2; }
-        .overlay p { font-size: 1.2rem; max-width: 80%; margin: 10px 0; }
-        .overlay.hidden { display: none; }
-        .spinner { border: 5px solid #444; border-top: 5px solid #fff; border-radius: 50%;
-            width: 50px; height: 50px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        model-viewer { width: 100%; height: 100%; }
-        #ar-scene { width: 100%; height: 100%; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+        }
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 2;
+        }
+        .overlay p {
+            font-size: 1.2rem;
+            max-width: 80%;
+            margin: 10px 0;
+        }
+        .overlay.hidden {
+            display: none;
+        }
+        .spinner {
+            border: 5px solid #444;
+            border-top: 5px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        model-viewer {
+            width: 100%;
+            height: 100%;
+        }
+        #ar-scene {
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
+
     <div id="loader" class="overlay">
         <div class="spinner"></div>
         <p id="loader-text">Cargando proyecto...</p>
     </div>
-    <div id="ar-container" class="container"></div>
+    
+    <div id="ar-container" class="container">
+        <!-- El contenido de RA se inyectará aquí dinámicamente -->
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -43,20 +88,18 @@
                 if (spinner) spinner.style.display = 'none';
             };
 
-            // Helper para convertir color HEX a valores 0-1 para el shader
+            // Función para convertir el color HEX a un formato que el shader entiende (ej: "1.0,0.0,0.0")
             function hexToRgbNorm(hex) {
                 hex = hex.replace(/^#/, '');
                 if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
                 const num = parseInt(hex, 16);
-                return [
-                    ((num >> 16) & 255) / 255,
-                    ((num >> 8) & 255) / 255,
-                    (num & 255) / 255
-                ].map(x => Math.round(x * 100) / 100).join(',');
+                const r = ((num >> 16) & 255) / 255;
+                const g = ((num >> 8) & 255) / 255;
+                const b = (num & 255) / 255;
+                return [r.toFixed(2), g.toFixed(2), b.toFixed(2)].join(',');
             }
 
             const initializeModelViewer = (projectData) => {
-                arContainer.innerHTML = ""; // Limpia antes de cargar nuevo asset
                 const modelViewer = document.createElement('model-viewer');
                 modelViewer.setAttribute('src', projectData.model_url);
                 modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
@@ -66,6 +109,7 @@
                 modelViewer.setAttribute('enable-pan', '');
                 modelViewer.setAttribute('autoplay', '');
                 modelViewer.setAttribute('crossorigin', 'anonymous');
+
                 arContainer.appendChild(modelViewer);
 
                 modelViewer.addEventListener('load', () => loader.classList.add('hidden'));
@@ -73,8 +117,6 @@
             };
 
             const initializeAframeVideo = (projectData) => {
-                arContainer.innerHTML = ""; // Limpia antes de cargar nuevo asset
-
                 const scene = document.createElement('a-scene');
                 scene.setAttribute('vr-mode-ui', 'enabled: false');
                 scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
@@ -94,6 +136,7 @@
                 scene.appendChild(assets);
 
                 const marker = document.createElement('a-marker');
+                
                 if(projectData.marker_type === 'image' && projectData.marker_url) {
                     marker.setAttribute('type', 'pattern');
                     marker.setAttribute('url', projectData.marker_url);
@@ -102,15 +145,11 @@
                 }
                 marker.setAttribute('emitevents', 'true');
 
-                const chromaColor = projectData.chroma_key_color || '#00FF00';
-                const chromaNorm = hexToRgbNorm(chromaColor);
-
-                // Atributos shader separados, NO en material
                 const videoPlane = document.createElement('a-plane');
-                videoPlane.setAttribute('shader', 'transparent-video');
-                videoPlane.setAttribute('src', '#video-asset');
-                videoPlane.setAttribute('color', chromaNorm); // RGB normalizado
-                videoPlane.setAttribute('threshold', '0.3');   // Tolerancia. Ajusta si es necesario
+                const chromaColor = projectData.chroma_key_color || '#00FF00'; // Verde por defecto si no hay color
+                
+                // Aplicamos el shader y pasamos el color y el video
+                videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset; color: ${hexToRgbNorm(chromaColor)}`);
                 videoPlane.setAttribute('width', '1.6');
                 videoPlane.setAttribute('height', '0.9');
                 videoPlane.setAttribute('rotation', '-90 0 0');
@@ -123,11 +162,9 @@
                 scene.addEventListener('loaded', () => {
                     loader.classList.add('hidden');
                     const video = document.getElementById('video-asset');
-                    if(video) {
-                        video.play().catch(() => {});
-                        marker.addEventListener('markerFound', () => video.play());
-                        marker.addEventListener('markerLost', () => video.pause());
-                    }
+                    video.play().catch(() => {});
+                    marker.addEventListener('markerFound', () => video.play());
+                    marker.addEventListener('markerLost', () => video.pause());
                 });
             };
 
@@ -141,6 +178,7 @@
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     
                     const projectData = await response.json();
+                    
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
                     } else { // 'model' es el default
