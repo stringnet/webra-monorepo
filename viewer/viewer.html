@@ -2,26 +2,22 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Visualizador AR - WebRA PRO</title>
+    <title>Visualizador AR - WebRA Debug</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Librerías necesarias -->
+    <!-- Librerías -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-chromakey-material@^1.0.0/dist/aframe-chromakey-material.min.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     <style>
-        body {margin: 0; overflow: hidden;}
+        body {margin:0;overflow:hidden;}
         #playButton {
-            position: absolute; z-index: 10; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            position: absolute; z-index: 10; left: 50%; top: 60%; transform: translate(-50%, -50%);
             padding: 20px 35px; font-size: 1.5rem; border: none; border-radius: 12px; background: #2e88f8;
             color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1);
         }
-        #playButton:active { background: #10417a; }
-        .overlay {
-            position: absolute; top:0; left:0; right:0; bottom:0;
-            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20;
-            background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;
-        }
+        #debug {position:fixed;bottom:15px;left:15px;z-index:30;background:rgba(0,0,0,0.75);color:#fff;padding:10px 16px;border-radius:8px;font-size:1em;}
+        .overlay { position: absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 20; background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;}
         .hidden {display:none;}
         model-viewer { width: 100vw; height: 100vh; }
     </style>
@@ -33,9 +29,8 @@
     </div>
     <button id="playButton" style="display:none;">▶ Play Video</button>
     <div id="ar-container"></div>
-
+    <div id="debug" class="hidden"></div>
     <script>
-        // Utilidad para convertir #00FF00 a "0,1,0"
         function hexToRGBString(hex) {
             hex = hex.replace(/^#/, '');
             if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
@@ -46,19 +41,24 @@
                 (num & 255) / 255
             ].map(x => x.toFixed(2)).join(',');
         }
-
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const loader = document.getElementById('loader');
             const arContainer = document.getElementById('ar-container');
             const playButton = document.getElementById('playButton');
+            const debug = document.getElementById('debug');
 
             const showError = msg => {
                 loader.innerHTML = `<div style="color:red;">${msg}</div>`;
                 loader.classList.remove('hidden');
             };
 
-            // --- MAIN FLOW ---
+            function showDebug(info) {
+                debug.innerHTML = info;
+                debug.classList.remove('hidden');
+                console.log('[DEBUG]', info.replace(/<br>/g, '\n'));
+            }
+
             (async function(){
                 try {
                     // Extraer el projectId dinámicamente de la URL
@@ -71,25 +71,24 @@
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     const projectData = await response.json();
 
-                    // --- CARGA DINÁMICA DE VIDEO CON CHROMA ---
                     if (projectData.asset_type === 'video') {
                         loader.classList.add('hidden');
                         playButton.style.display = "block";
-
+                        const chromaColor = projectData.chroma_key_color || '#00FF00';
+                        showDebug(
+                            `<b>URL Video:</b> ${projectData.model_url}<br>` +
+                            `<b>Chroma HEX:</b> ${chromaColor}<br>` +
+                            `<b>Chroma RGB 0-1:</b> ${hexToRGBString(chromaColor)}`
+                        );
                         playButton.onclick = function() {
                             playButton.style.display = "none";
                             loader.classList.remove('hidden');
-                            // Limpiar antes de inyectar
                             arContainer.innerHTML = "";
-
-                            // Crear la escena
                             const scene = document.createElement('a-scene');
                             scene.setAttribute('embedded', '');
                             scene.setAttribute('vr-mode-ui', 'enabled: false');
                             scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                             scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-
-                            // Assets: el video
                             const assets = document.createElement('a-assets');
                             const videoAsset = document.createElement('video');
                             videoAsset.setAttribute('id', 'videoChroma');
@@ -102,7 +101,6 @@
                             assets.appendChild(videoAsset);
                             scene.appendChild(assets);
 
-                            // El marker
                             const marker = document.createElement('a-marker');
                             if(projectData.marker_type === 'image' && projectData.marker_url) {
                                 marker.setAttribute('type', 'pattern');
@@ -112,32 +110,30 @@
                             }
                             marker.setAttribute('emitevents', 'true');
 
-                            // El color chroma desde base de datos
-                            const chromaColor = projectData.chroma_key_color || '#00FF00';
                             const chromaRGB = hexToRGBString(chromaColor);
-
-                            // Plano con shader de chroma
                             const plane = document.createElement('a-plane');
                             plane.setAttribute('width', '1.6');
                             plane.setAttribute('height', '0.9');
                             plane.setAttribute('rotation', '-90 0 0');
                             plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
-
                             marker.appendChild(plane);
                             scene.appendChild(marker);
                             scene.appendChild(document.createElement('a-camera'));
                             arContainer.appendChild(scene);
 
-                            // Esperar a que el video esté listo
                             const videoElem = assets.querySelector('#videoChroma');
                             videoElem.addEventListener('loadeddata', function() {
                                 loader.classList.add('hidden');
                                 videoElem.play();
+                                showDebug(
+                                    `<b>URL Video:</b> ${videoElem.src}<br>` +
+                                    `<b>Chroma HEX:</b> ${chromaColor}<br>` +
+                                    `<b>Chroma RGB 0-1:</b> ${chromaRGB}<br>` +
+                                    `<b>Video readyState:</b> ${videoElem.readyState}`
+                                );
                             });
                         };
-                    }
-                    // --- CARGA DE MODELO 3D ---
-                    else {
+                    } else {
                         loader.classList.add('hidden');
                         arContainer.innerHTML = "";
                         const modelViewer = document.createElement('model-viewer');
@@ -151,6 +147,7 @@
                         modelViewer.style.width = "100vw";
                         modelViewer.style.height = "100vh";
                         arContainer.appendChild(modelViewer);
+                        showDebug(`<b>Modo:</b> Modelo 3D<br><b>URL Modelo:</b> ${projectData.model_url}`);
                     }
                 } catch(err) {
                     showError("ERROR: " + err.message);
