@@ -88,6 +88,18 @@
                 if (spinner) spinner.style.display = 'none';
             };
 
+            // Helper para convertir color HEX a valores 0-1 para el shader
+            function hexToRgbNorm(hex) {
+                hex = hex.replace(/^#/, '');
+                if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+                const num = parseInt(hex, 16);
+                return [
+                    ((num >> 16) & 255) / 255,
+                    ((num >> 8) & 255) / 255,
+                    (num & 255) / 255
+                ].map(x => Math.round(x * 100) / 100).join(',');
+            }
+
             const initializeModelViewer = (projectData) => {
                 const modelViewer = document.createElement('model-viewer');
                 modelViewer.setAttribute('src', projectData.model_url);
@@ -135,8 +147,10 @@
                 marker.setAttribute('emitevents', 'true');
 
                 const videoPlane = document.createElement('a-plane');
+                const chromaColor = projectData.chroma_key_color || '#00FF00';
+                
                 // Usamos el shader que ahora está garantizado que existe
-                videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset`);
+                videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset; color: ${hexToRgbNorm(chromaColor)}`);
                 videoPlane.setAttribute('width', '1.6');
                 videoPlane.setAttribute('height', '0.9');
                 videoPlane.setAttribute('rotation', '-90 0 0');
