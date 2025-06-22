@@ -48,6 +48,20 @@
     <canvas id="hidden-canvas"></canvas>
 
     <script>
+        // Componente A-Frame para usar el canvas como textura directa en a-plane
+        AFRAME.registerComponent('canvas-texture', {
+            schema: {type: 'selector'}, // recibe el canvas como selector
+            init: function () {
+                this.texture = new THREE.Texture(this.data);
+                this.texture.needsUpdate = true;
+                this.el.getObject3D('mesh').material.map = this.texture;
+                this.el.getObject3D('mesh').material.transparent = true;
+            },
+            tick: function () {
+                this.texture.needsUpdate = true;
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const arContainer = document.getElementById('ar-container');
@@ -115,7 +129,6 @@
                     playButton.style.display = "none";
                     loader.classList.remove('hidden');
 
-                    // -- PREPARA VIDEO Y CANVAS
                     video.src = projectData.model_url;
                     video.crossOrigin = "anonymous";
                     video.load();
@@ -130,13 +143,6 @@
                         scene.setAttribute('vr-mode-ui', 'enabled: false');
                         scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
                         scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-                        const assets = document.createElement('a-assets');
-                        // Creamos una textura base blanca por defecto
-                        const img = document.createElement('img');
-                        img.id = "canvas-texture";
-                        img.src = hiddenCanvas.toDataURL();
-                        assets.appendChild(img);
-                        scene.appendChild(assets);
 
                         const marker = document.createElement('a-marker');
                         if(projectData.marker_type === 'image' && projectData.marker_url) {
@@ -147,14 +153,14 @@
                         }
                         marker.setAttribute('emitevents', 'true');
 
-                        // a-image que mostrará la textura dinámica
-                        const aImage = document.createElement('a-image');
-                        aImage.setAttribute('id', 'video-chroma');
-                        aImage.setAttribute('src', '#canvas-texture');
-                        aImage.setAttribute('width', '1.6');
-                        aImage.setAttribute('height', '0.9');
-                        aImage.setAttribute('rotation', '-90 0 0');
-                        marker.appendChild(aImage);
+                        // a-plane que usará el canvas como textura directa
+                        const aPlane = document.createElement('a-plane');
+                        aPlane.setAttribute('width', '1.6');
+                        aPlane.setAttribute('height', '0.9');
+                        aPlane.setAttribute('rotation', '-90 0 0');
+                        aPlane.setAttribute('canvas-texture', '#hidden-canvas');
+                        marker.appendChild(aPlane);
+
                         scene.appendChild(marker);
                         scene.appendChild(document.createElement('a-camera'));
                         arContainer.appendChild(scene);
@@ -164,7 +170,6 @@
                         const chromaRGB = hexToRgb(chromaKeyColor);
                         const chromaThreshold = projectData.chroma_key_threshold || 80;
 
-                        // Control mute/pause
                         controls.style.display = "block";
                         muteBtn.textContent = video.muted ? "🔇" : "🔊";
                         pauseBtn.textContent = video.paused ? "▶️" : "⏸";
@@ -189,12 +194,9 @@
                                 }
                             }
                             ctx.putImageData(frame, 0, 0);
-                            // Forzamos que la textura se refresque (nuevo objeto dataURL)
-                            img.src = hiddenCanvas.toDataURL("image/png") + "?" + Date.now();
                             requestAnimationFrame(drawChromaFrame);
                         }
 
-                        // PLAY después de interacción usuario (compatibilidad mobile)
                         video.play().then(() => {
                             drawChromaFrame();
                         }).catch(err => {
