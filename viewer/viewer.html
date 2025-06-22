@@ -21,6 +21,14 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         model-viewer { width: 100%; height: 100%; }
         #ar-scene { width: 100%; height: 100%; }
+        #playButton {
+            position: absolute; z-index: 10; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            padding: 20px 35px; font-size: 1.5rem; border: none; border-radius: 12px; background: #2e88f8;
+            color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1);
+            transition: background .2s;
+        }
+        #playButton:hover { background: #1867b7; }
+        #playButton:active { background: #10417a; }
     </style>
 </head>
 <body>
@@ -29,6 +37,7 @@
         <p id="loader-text">Cargando proyecto...</p>
     </div>
     <div id="ar-container" class="container"></div>
+    <button id="playButton" style="display:none;">▶ Play Video</button>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -36,14 +45,14 @@
             const arContainer = document.getElementById('ar-container');
             const loader = document.getElementById('loader');
             const loaderText = document.getElementById('loader-text');
-            
+            const playButton = document.getElementById('playButton');
+
             const showError = (message) => {
                 loaderText.textContent = `Error: ${message}`;
                 const spinner = document.querySelector('.spinner');
                 if (spinner) spinner.style.display = 'none';
             };
 
-            // Convierte color HEX a RGB normalizado (ej: "#00ff00" => "0,1,0")
             function hexToRgbNorm(hex) {
                 hex = hex.replace(/^#/, '');
                 if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
@@ -55,13 +64,13 @@
                 ].map(x => Math.round(x * 100) / 100).join(',');
             }
 
-            // Limpia el contenedor antes de renderizar (no se duplican assets)
             function clearContainer() {
                 arContainer.innerHTML = "";
             }
 
             const initializeModelViewer = (projectData) => {
                 clearContainer();
+                playButton.style.display = "none";
                 const modelViewer = document.createElement('model-viewer');
                 modelViewer.setAttribute('src', projectData.model_url);
                 modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
@@ -79,62 +88,74 @@
 
             const initializeAframeVideo = (projectData) => {
                 clearContainer();
-                const scene = document.createElement('a-scene');
-                scene.setAttribute('vr-mode-ui', 'enabled: false');
-                scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
-                const assets = document.createElement('a-assets');
-                const videoAsset = document.createElement('video');
-                videoAsset.id = 'video-asset';
-                videoAsset.setAttribute('src', projectData.model_url); // Puede ser .mp4 o .webm
-                videoAsset.setAttribute('loop', 'true');
-                videoAsset.setAttribute('autoplay', 'true');
-                videoAsset.setAttribute('muted', 'true');
-                videoAsset.setAttribute('crossorigin', 'anonymous');
-                videoAsset.setAttribute('playsinline', 'true');
-                videoAsset.setAttribute('webkit-playsinline', 'true');
-                assets.appendChild(videoAsset);
-                scene.appendChild(assets);
+                playButton.style.display = "block";
+                loader.classList.add('hidden');
 
-                const marker = document.createElement('a-marker');
-                if(projectData.marker_type === 'image' && projectData.marker_url) {
-                    marker.setAttribute('type', 'pattern');
-                    marker.setAttribute('url', projectData.marker_url);
-                } else {
-                    marker.setAttribute('preset', 'hiro'); 
-                }
-                marker.setAttribute('emitevents', 'true');
+                playButton.onclick = () => {
+                    playButton.style.display = "none";
+                    loader.classList.remove('hidden');
+                    // Genera la escena SOLO tras dar play (así es seguro)
+                    setTimeout(() => {
+                        const scene = document.createElement('a-scene');
+                        scene.setAttribute('vr-mode-ui', 'enabled: false');
+                        scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                        scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
-                // Obtiene color y threshold de la base de datos, valores por defecto si no hay
-                const chromaColor = projectData.chroma_key_color || '#00FF00';
-                const chromaNorm = hexToRgbNorm(chromaColor);
-                const chromaThreshold = projectData.chroma_key_threshold || '0.3';
+                        const assets = document.createElement('a-assets');
+                        const videoAsset = document.createElement('video');
+                        videoAsset.id = 'video-asset';
+                        videoAsset.setAttribute('src', projectData.model_url); // MP4 o WebM
+                        videoAsset.setAttribute('loop', 'true');
+                        videoAsset.setAttribute('autoplay', 'true');
+                        videoAsset.setAttribute('muted', 'true');
+                        videoAsset.setAttribute('crossorigin', 'anonymous');
+                        videoAsset.setAttribute('playsinline', 'true');
+                        videoAsset.setAttribute('webkit-playsinline', 'true');
+                        assets.appendChild(videoAsset);
+                        scene.appendChild(assets);
 
-                // Usa shader y parámetros SEPARADOS, no como material compuesto
-                const videoPlane = document.createElement('a-plane');
-                videoPlane.setAttribute('shader', 'transparent-video');
-                videoPlane.setAttribute('src', '#video-asset');
-                videoPlane.setAttribute('color', chromaNorm); // RGB normalizado (ej: "0,1,0")
-                videoPlane.setAttribute('threshold', chromaThreshold); // Por defecto 0.3, ajustable
-                videoPlane.setAttribute('width', '1.6');
-                videoPlane.setAttribute('height', '0.9');
-                videoPlane.setAttribute('rotation', '-90 0 0');
-                marker.appendChild(videoPlane);
+                        const marker = document.createElement('a-marker');
+                        if(projectData.marker_type === 'image' && projectData.marker_url) {
+                            marker.setAttribute('type', 'pattern');
+                            marker.setAttribute('url', projectData.marker_url);
+                        } else {
+                            marker.setAttribute('preset', 'hiro'); 
+                        }
+                        marker.setAttribute('emitevents', 'true');
 
-                scene.appendChild(marker);
-                scene.appendChild(document.createElement('a-camera'));
-                arContainer.appendChild(scene);
+                        const chromaColor = projectData.chroma_key_color || '#00FF00';
+                        const chromaNorm = hexToRgbNorm(chromaColor);
+                        const chromaThreshold = projectData.chroma_key_threshold || '0.3';
 
-                scene.addEventListener('loaded', () => {
-                    loader.classList.add('hidden');
-                    const video = document.getElementById('video-asset');
-                    if(video) {
-                        video.play().catch(() => {});
-                        marker.addEventListener('markerFound', () => video.play());
-                        marker.addEventListener('markerLost', () => video.pause());
-                    }
-                });
+                        const videoPlane = document.createElement('a-plane');
+                        videoPlane.setAttribute('shader', 'transparent-video');
+                        videoPlane.setAttribute('src', '#video-asset');
+                        videoPlane.setAttribute('color', chromaNorm);
+                        videoPlane.setAttribute('threshold', chromaThreshold);
+                        videoPlane.setAttribute('width', '1.6');
+                        videoPlane.setAttribute('height', '0.9');
+                        videoPlane.setAttribute('rotation', '-90 0 0');
+                        marker.appendChild(videoPlane);
+
+                        scene.appendChild(marker);
+                        scene.appendChild(document.createElement('a-camera'));
+                        arContainer.appendChild(scene);
+
+                        // Esperar a que cargue escena y video (a veces video aún no está listo)
+                        scene.addEventListener('loaded', () => {
+                            loader.classList.add('hidden');
+                            const video = document.getElementById('video-asset');
+                            if (video) {
+                                video.load();
+                                // El click ya desbloqueó el contexto, ahora sí reproducimos
+                                video.play().catch(() => {});
+                                marker.addEventListener('markerFound', () => video.play());
+                                marker.addEventListener('markerLost', () => video.pause());
+                            }
+                        });
+                    }, 200);
+                };
             };
 
             const initialize = async () => {
@@ -147,7 +168,6 @@
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     
                     const projectData = await response.json();
-                    // Limpia la escena antes de cargar nuevo asset
                     if (projectData.asset_type === 'video') {
                         initializeAframeVideo(projectData);
                     } else { // 'model' es el default
