@@ -2,13 +2,12 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Visualizador AR - WebRA Debug</title>
+    <title>Visualizador AR - WebRA Fix</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Librerías -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-chromakey-material@^1.0.0/dist/aframe-chromakey-material.min.js"></script>
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     <style>
         body {margin:0;overflow:hidden;}
         #playButton {
@@ -19,7 +18,6 @@
         #debug {position:fixed;bottom:15px;left:15px;z-index:30;background:rgba(0,0,0,0.75);color:#fff;padding:10px 16px;border-radius:8px;font-size:1em;}
         .overlay { position: absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 20; background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;}
         .hidden {display:none;}
-        model-viewer { width: 100vw; height: 100vh; }
     </style>
 </head>
 <body>
@@ -80,58 +78,71 @@
                             `<b>Chroma HEX:</b> ${chromaColor}<br>` +
                             `<b>Chroma RGB 0-1:</b> ${hexToRGBString(chromaColor)}`
                         );
+
                         playButton.onclick = function() {
                             playButton.style.display = "none";
                             loader.classList.remove('hidden');
                             arContainer.innerHTML = "";
-                            const scene = document.createElement('a-scene');
-                            scene.setAttribute('embedded', '');
-                            scene.setAttribute('vr-mode-ui', 'enabled: false');
-                            scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                            scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-                            const assets = document.createElement('a-assets');
-                            const videoAsset = document.createElement('video');
-                            videoAsset.setAttribute('id', 'videoChroma');
-                            videoAsset.setAttribute('src', projectData.model_url);
-                            videoAsset.setAttribute('loop', 'true');
-                            videoAsset.setAttribute('crossorigin', 'anonymous');
-                            videoAsset.setAttribute('webkit-playsinline', '');
-                            videoAsset.setAttribute('playsinline', '');
-                            videoAsset.setAttribute('preload', 'auto');
-                            assets.appendChild(videoAsset);
-                            scene.appendChild(assets);
 
-                            const marker = document.createElement('a-marker');
-                            if(projectData.marker_type === 'image' && projectData.marker_url) {
-                                marker.setAttribute('type', 'pattern');
-                                marker.setAttribute('url', projectData.marker_url);
-                            } else {
-                                marker.setAttribute('preset', 'hiro'); 
-                            }
-                            marker.setAttribute('emitevents', 'true');
+                            // 1. Creamos video HTML (fuera de A-Frame) y esperamos readyState==4
+                            const testVideo = document.createElement('video');
+                            testVideo.src = projectData.model_url;
+                            testVideo.crossOrigin = "anonymous";
+                            testVideo.setAttribute('playsinline', '');
+                            testVideo.setAttribute('webkit-playsinline', '');
+                            testVideo.preload = 'auto';
+                            testVideo.muted = true;
+                            testVideo.loop = true;
 
-                            const chromaRGB = hexToRGBString(chromaColor);
-                            const plane = document.createElement('a-plane');
-                            plane.setAttribute('width', '1.6');
-                            plane.setAttribute('height', '0.9');
-                            plane.setAttribute('rotation', '-90 0 0');
-                            plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
-                            marker.appendChild(plane);
-                            scene.appendChild(marker);
-                            scene.appendChild(document.createElement('a-camera'));
-                            arContainer.appendChild(scene);
-
-                            const videoElem = assets.querySelector('#videoChroma');
-                            videoElem.addEventListener('loadeddata', function() {
-                                loader.classList.add('hidden');
-                                videoElem.play();
+                            testVideo.addEventListener('canplaythrough', function onCanPlay() {
                                 showDebug(
-                                    `<b>URL Video:</b> ${videoElem.src}<br>` +
+                                    `<b>URL Video:</b> ${testVideo.src}<br>` +
                                     `<b>Chroma HEX:</b> ${chromaColor}<br>` +
-                                    `<b>Chroma RGB 0-1:</b> ${chromaRGB}<br>` +
-                                    `<b>Video readyState:</b> ${videoElem.readyState}`
+                                    `<b>Chroma RGB 0-1:</b> ${hexToRGBString(chromaColor)}<br>` +
+                                    `<b>Video readyState:</b> ${testVideo.readyState}`
                                 );
+                                testVideo.removeEventListener('canplaythrough', onCanPlay);
+
+                                // 2. Ahora sí, insertamos la escena con el asset cargado
+                                loader.classList.add('hidden');
+                                const scene = document.createElement('a-scene');
+                                scene.setAttribute('embedded', '');
+                                scene.setAttribute('vr-mode-ui', 'enabled: false');
+                                scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                                scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+
+                                // Assets: el video
+                                const assets = document.createElement('a-assets');
+                                // Usar el mismo objeto video para asegurar buffer
+                                testVideo.id = 'videoChroma';
+                                assets.appendChild(testVideo);
+                                scene.appendChild(assets);
+
+                                const marker = document.createElement('a-marker');
+                                if(projectData.marker_type === 'image' && projectData.marker_url) {
+                                    marker.setAttribute('type', 'pattern');
+                                    marker.setAttribute('url', projectData.marker_url);
+                                } else {
+                                    marker.setAttribute('preset', 'hiro'); 
+                                }
+                                marker.setAttribute('emitevents', 'true');
+                                const chromaRGB = hexToRGBString(chromaColor);
+                                const plane = document.createElement('a-plane');
+                                plane.setAttribute('width', '1.6');
+                                plane.setAttribute('height', '0.9');
+                                plane.setAttribute('rotation', '-90 0 0');
+                                plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
+                                marker.appendChild(plane);
+                                scene.appendChild(marker);
+                                scene.appendChild(document.createElement('a-camera'));
+                                arContainer.appendChild(scene);
+
+                                // Play seguro:
+                                setTimeout(() => {
+                                    testVideo.play().catch(() => {});
+                                }, 250);
                             });
+                            testVideo.load();
                         };
                     } else {
                         loader.classList.add('hidden');
