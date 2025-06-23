@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizador de RA - WebRA</title>
     
-    <!-- Se cargan los scripts estáticamente en el head para asegurar el orden correcto -->
+    <!-- CORRECCIÓN: Se cargan los scripts estáticamente en el head para asegurar el orden -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://unpkg.com/aframe-transparent-video-shader@1.0.6/dist/aframe-transparent-video-shader.umd.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 
     <style>
@@ -75,48 +76,6 @@
     </div>
 
     <script>
-        // --- COMPONENTE PERSONALIZADO PARA CHROMA KEY ---
-        AFRAME.registerComponent('chroma-video-material', {
-            schema: {
-                src: { type: 'asset' },
-                color: { type: 'color', default: '#00FF00' }, // Verde por defecto
-                threshold: { type: 'number', default: 0.25 }
-            },
-            init: function () {
-                this.video = this.data.src;
-                if (!this.video) return;
-
-                const vertexShader = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
-                const fragmentShader = `
-                    uniform sampler2D u_texture;
-                    uniform vec3 u_color;
-                    uniform float u_threshold;
-                    varying vec2 vUv;
-                    void main() {
-                        vec3 tColor = texture2D(u_texture, vUv).rgb;
-                        float a = (length(tColor - u_color) - u_threshold) * 7.0;
-                        gl_FragColor = vec4(tColor, a);
-                    }
-                `;
-
-                const material = new THREE.ShaderMaterial({
-                    uniforms: {
-                        u_texture: { value: new THREE.VideoTexture(this.video) },
-                        u_color: { value: new THREE.Color(this.data.color) },
-                        u_threshold: { value: this.data.threshold }
-                    },
-                    vertexShader: vertexShader,
-                    fragmentShader: fragmentShader,
-                    transparent: true
-                });
-                
-                const mesh = this.el.getObject3D('mesh');
-                if (mesh) {
-                    mesh.material = material;
-                }
-            }
-        });
-
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
             const arContainer = document.getElementById('ar-container');
@@ -128,6 +87,17 @@
                 const spinner = document.querySelector('.spinner');
                 if (spinner) spinner.style.display = 'none';
             };
+
+            // Helper para convertir color HEX a valores 0-1 para el shader
+            function hexToRgbNorm(hex) {
+                hex = hex.replace(/^#/, '');
+                if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+                const num = parseInt(hex, 16);
+                const r = ((num >> 16) & 255) / 255;
+                const g = ((num >> 8) & 255) / 255;
+                const b = (num & 255) / 255;
+                return [r.toFixed(2), g.toFixed(2), b.toFixed(2)].join(',');
+            }
 
             const initializeModelViewer = (projectData) => {
                 const modelViewer = document.createElement('model-viewer');
@@ -176,9 +146,10 @@
                 marker.setAttribute('emitevents', 'true');
 
                 const videoPlane = document.createElement('a-plane');
-                const chromaColor = projectData.chroma_key_color || '#00FF00';
+                const chromaColor = projectData.chroma_key_color || '#00FF00'; // Verde por defecto si no hay color
                 
-                videoPlane.setAttribute('chroma-video-material', `src: #video-asset; color: ${chromaColor}`);
+                // Usamos el shader que ahora está garantizado que existe
+                videoPlane.setAttribute('material', `shader: transparent-video; src: #video-asset; color: ${hexToRgbNorm(chromaColor)}`);
                 videoPlane.setAttribute('width', '1.6');
                 videoPlane.setAttribute('height', '0.9');
                 videoPlane.setAttribute('rotation', '-90 0 0');
