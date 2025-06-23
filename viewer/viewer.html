@@ -2,207 +2,223 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Visualizador AR PRO UX</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Librerías -->
+    <title>Visualizador de RA - WebRA</title>
+    
+    <!-- Se cargan los scripts estáticamente en el head para asegurar el orden correcto -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/aframe-chromakey-material@^1.0.0/dist/aframe-chromakey-material.min.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+
     <style>
-        body {margin:0;overflow:hidden;}
-        #playButton {
-            position: absolute; z-index: 10; left: 50%; top: 65%; transform: translate(-50%, -50%);
-            padding: 20px 35px; font-size: 1.5rem; border: none; border-radius: 12px; background: #2e88f8;
-            color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1); display: none;
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
         }
-        #videoPreview {
-            position: absolute; z-index: 9; left: 50%; top: 45%; transform: translate(-50%, -50%);
-            max-width: 90vw; max-height: 45vh; border-radius: 14px; box-shadow: 0 4px 30px rgba(0,0,0,0.3); background: #000;
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 2;
+        }
+        .overlay p {
+            font-size: 1.2rem;
+            max-width: 80%;
+            margin: 10px 0;
+        }
+        .overlay.hidden {
             display: none;
         }
-        #debug {position:fixed;bottom:15px;left:15px;z-index:30;background:rgba(0,0,0,0.85);color:#fff;padding:14px 20px 8px 18px;border-radius:8px;font-size:1em;max-width:60vw;}
-        .overlay { position: absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 20; background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;}
-        .hidden {display:none;}
-        model-viewer { width: 100vw; height: 100vh; }
+        .spinner {
+            border: 5px solid #444;
+            border-top: 5px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        model-viewer {
+            width: 100%;
+            height: 100%;
+        }
+        #ar-scene {
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
+
     <div id="loader" class="overlay">
-        <div style="margin-bottom:18px">Cargando proyecto...</div>
-        <div class="spinner" style="border:5px solid #444;border-top:5px solid #fff;width:40px;height:40px;border-radius:50%;animation:spin 1s linear infinite"></div>
+        <div class="spinner"></div>
+        <p id="loader-text">Cargando proyecto...</p>
     </div>
-    <button id="playButton">▶ Iniciar Experiencia AR</button>
-    <video id="videoPreview" muted loop playsinline webkit-playsinline></video>
-    <div id="ar-container"></div>
-    <div id="debug" class="hidden"></div>
+    
+    <div id="ar-container" class="container">
+        <!-- El contenido de RA se inyectará aquí dinámicamente -->
+    </div>
+
     <script>
-        function hexToRGBString(hex) {
-            hex = hex.replace(/^#/, '');
-            if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
-            const num = parseInt(hex, 16);
-            return [
-                ((num >> 16) & 255) / 255,
-                ((num >> 8) & 255) / 255,
-                (num & 255) / 255
-            ].map(x => x.toFixed(2)).join(',');
-        }
+        // --- COMPONENTE PERSONALIZADO PARA CHROMA KEY ---
+        AFRAME.registerComponent('chroma-video-material', {
+            schema: {
+                src: { type: 'asset' },
+                color: { type: 'color', default: '#00FF00' }, // Verde por defecto
+                threshold: { type: 'number', default: 0.25 }
+            },
+            init: function () {
+                this.video = this.data.src;
+                if (!this.video) return;
+
+                const vertexShader = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+                const fragmentShader = `
+                    uniform sampler2D u_texture;
+                    uniform vec3 u_color;
+                    uniform float u_threshold;
+                    varying vec2 vUv;
+                    void main() {
+                        vec3 tColor = texture2D(u_texture, vUv).rgb;
+                        float a = (length(tColor - u_color) - u_threshold) * 7.0;
+                        gl_FragColor = vec4(tColor, a);
+                    }
+                `;
+
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        u_texture: { value: new THREE.VideoTexture(this.video) },
+                        u_color: { value: new THREE.Color(this.data.color) },
+                        u_threshold: { value: this.data.threshold }
+                    },
+                    vertexShader: vertexShader,
+                    fragmentShader: fragmentShader,
+                    transparent: true
+                });
+                
+                const mesh = this.el.getObject3D('mesh');
+                if (mesh) {
+                    mesh.material = material;
+                }
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             const API_BASE_URL = 'https://apiwebra.scanmee.io';
-            const loader = document.getElementById('loader');
             const arContainer = document.getElementById('ar-container');
-            const playButton = document.getElementById('playButton');
-            const debug = document.getElementById('debug');
-            const videoPreview = document.getElementById('videoPreview');
-
-            const showError = msg => {
-                loader.innerHTML = `<div style="color:red;">${msg}</div>`;
-                loader.classList.remove('hidden');
-                debug.innerHTML += `<div style="color:red;"><b>ERROR:</b> ${msg}</div>`;
-                debug.classList.remove('hidden');
-                console.error(msg);
+            const loader = document.getElementById('loader');
+            const loaderText = document.getElementById('loader-text');
+            
+            const showError = (message) => {
+                loaderText.textContent = `Error: ${message}`;
+                const spinner = document.querySelector('.spinner');
+                if (spinner) spinner.style.display = 'none';
             };
 
-            function showDebug(info, important) {
-                debug.innerHTML += info + "<br>";
-                debug.classList.remove('hidden');
-                if (important) console.warn('[DEBUG]', info.replace(/<br>/g, '\n'));
-                else console.log('[DEBUG]', info.replace(/<br>/g, '\n'));
-            }
+            const initializeModelViewer = (projectData) => {
+                const modelViewer = document.createElement('model-viewer');
+                modelViewer.setAttribute('src', projectData.model_url);
+                modelViewer.setAttribute('alt', `Visor 3D de ${projectData.name}`);
+                modelViewer.setAttribute('ar', '');
+                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
+                modelViewer.setAttribute('camera-controls', '');
+                modelViewer.setAttribute('enable-pan', '');
+                modelViewer.setAttribute('autoplay', '');
+                modelViewer.setAttribute('crossorigin', 'anonymous');
 
-            (async function(){
+                arContainer.appendChild(modelViewer);
+
+                modelViewer.addEventListener('load', () => loader.classList.add('hidden'));
+                modelViewer.addEventListener('error', () => showError('No se pudo cargar el modelo 3D.'));
+            };
+
+            const initializeAframeVideo = (projectData) => {
+                const scene = document.createElement('a-scene');
+                scene.setAttribute('vr-mode-ui', 'enabled: false');
+                scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
+
+                const assets = document.createElement('a-assets');
+                const videoAsset = document.createElement('video');
+                videoAsset.id = 'video-asset';
+                videoAsset.setAttribute('src', projectData.model_url);
+                videoAsset.setAttribute('loop', 'true');
+                videoAsset.setAttribute('autoplay', 'true');
+                videoAsset.setAttribute('muted', 'true');
+                videoAsset.setAttribute('crossorigin', 'anonymous');
+                videoAsset.setAttribute('playsinline', 'true');
+                videoAsset.setAttribute('webkit-playsinline', 'true');
+                assets.appendChild(videoAsset);
+                scene.appendChild(assets);
+
+                const marker = document.createElement('a-marker');
+                
+                if(projectData.marker_type === 'image' && projectData.marker_url) {
+                    marker.setAttribute('type', 'pattern');
+                    marker.setAttribute('url', projectData.marker_url);
+                } else {
+                    marker.setAttribute('preset', 'hiro'); 
+                }
+                marker.setAttribute('emitevents', 'true');
+
+                const videoPlane = document.createElement('a-plane');
+                const chromaColor = projectData.chroma_key_color || '#00FF00';
+                
+                videoPlane.setAttribute('chroma-video-material', `src: #video-asset; color: ${chromaColor}`);
+                videoPlane.setAttribute('width', '1.6');
+                videoPlane.setAttribute('height', '0.9');
+                videoPlane.setAttribute('rotation', '-90 0 0');
+                
+                marker.appendChild(videoPlane);
+                scene.appendChild(marker);
+                scene.appendChild(document.createElement('a-camera'));
+                arContainer.appendChild(scene);
+
+                scene.addEventListener('loaded', () => {
+                    loader.classList.add('hidden');
+                    const video = document.getElementById('video-asset');
+                    video.play().catch(() => {});
+                    marker.addEventListener('markerFound', () => video.play());
+                    marker.addEventListener('markerLost', () => video.pause());
+                });
+            };
+
+            const initialize = async () => {
                 try {
-                    // Extraer el projectId dinámicamente de la URL
                     const pathParts = window.location.pathname.split('/');
                     const projectId = pathParts.pop() || pathParts.pop();
                     if (!projectId) throw new Error("ID de proyecto no encontrado.");
 
-                    // Fetch de la API de tu backend
                     const response = await fetch(`${API_BASE_URL}/api/public/projects/${projectId}`);
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
+                    
                     const projectData = await response.json();
-
-                    debug.innerHTML = ""; // Limpiar logs previos
-                    showDebug(`<b>ProjectID:</b> ${projectId}`, true);
-
-                    // --- CARGA DINÁMICA DE VIDEO ---
+                    
                     if (projectData.asset_type === 'video') {
-                        // Comienza mostrando solo el loader
-                        loader.classList.remove('hidden');
-                        playButton.style.display = "none";
-                        videoPreview.style.display = "none";
-
-                        // Setear src, color y logs previos
-                        const chromaColor = projectData.chroma_key_color || '#00FF00';
-                        const chromaRGB = hexToRGBString(chromaColor);
-
-                        videoPreview.src = projectData.model_url;
-                        videoPreview.load();
-
-                        showDebug(`<b>URL Video:</b> ${projectData.model_url}<br>` +
-                            `<b>Chroma HEX:</b> ${chromaColor}<br>` +
-                            `<b>Chroma RGB 0-1:</b> ${chromaRGB}`, true);
-
-                        // LOGS de eventos del video
-                        ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "pause", "ended", "error"].forEach(evt => {
-                            videoPreview.addEventListener(evt, () => {
-                                showDebug(`<b>Video event:</b> ${evt}, readyState: ${videoPreview.readyState}, network: ${videoPreview.networkState}`);
-                            });
-                        });
-                        videoPreview.onerror = (e) => showError("Error al cargar el video (revisa CORS o formato)");
-
-                        // Cuando puede reproducirse, muestra preview y botón y oculta loader
-                        videoPreview.oncanplaythrough = () => {
-                            showDebug(`<span style="color:lime"><b>Video listo para reproducir</b></span>`, true);
-                            loader.classList.add('hidden');
-                            videoPreview.style.display = "block";
-                            playButton.style.display = "block";
-                            videoPreview.play().catch(()=>{});
-                        };
-
-                        // Si hay error, mostrarlo
-                        videoPreview.onstalled = () => showError("Video stalled, revisa el servidor o el formato.");
-                        videoPreview.onabort = () => showError("La carga de video fue abortada.");
-
-                        // Cuando dan play, inicia la experiencia AR
-                        playButton.onclick = function() {
-                            playButton.style.display = "none";
-                            videoPreview.style.display = "none";
-                            loader.innerHTML = "<div>Iniciando AR y solicitando permisos de cámara...</div><div class='spinner' style='margin-top:20px;border:5px solid #444;border-top:5px solid #fff;width:40px;height:40px;border-radius:50%;animation:spin 1s linear infinite'></div>";
-                            loader.classList.remove('hidden');
-                            arContainer.innerHTML = "";
-                            debug.innerHTML += `<hr><b>Iniciando escena AR...</b><br>`;
-
-                            // Creamos la escena y solo cuando video ya estaba OK
-                            const scene = document.createElement('a-scene');
-                            scene.setAttribute('embedded', '');
-                            scene.setAttribute('vr-mode-ui', 'enabled: false');
-                            scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                            scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-
-                            // Assets: el mismo objeto video
-                            const assets = document.createElement('a-assets');
-                            videoPreview.setAttribute('id', 'videoChroma');
-                            videoPreview.muted = false; // Ahora sí habilita audio si corresponde
-                            assets.appendChild(videoPreview);
-                            scene.appendChild(assets);
-
-                            // Marker AR
-                            const marker = document.createElement('a-marker');
-                            if(projectData.marker_type === 'image' && projectData.marker_url) {
-                                marker.setAttribute('type', 'pattern');
-                                marker.setAttribute('url', projectData.marker_url);
-                            } else {
-                                marker.setAttribute('preset', 'hiro'); 
-                            }
-                            marker.setAttribute('emitevents', 'true');
-                            // Plano con shader chroma
-                            const plane = document.createElement('a-plane');
-                            plane.setAttribute('width', '1.6');
-                            plane.setAttribute('height', '0.9');
-                            plane.setAttribute('rotation', '-90 0 0');
-                            plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
-                            marker.appendChild(plane);
-                            scene.appendChild(marker);
-                            scene.appendChild(document.createElement('a-camera'));
-                            arContainer.appendChild(scene);
-
-                            setTimeout(() => {
-                                videoPreview.play().then(()=>{
-                                    showDebug("<b>Video play() ejecutado en modo AR.</b>", true);
-                                }).catch(e=>{
-                                    showDebug("<b>ERROR play():</b> " + e, true);
-                                });
-                                loader.classList.add('hidden');
-                            }, 250);
-                        };
-
-                    // --- CARGA DE MODELO 3D ---
-                    } else {
-                        loader.classList.add('hidden');
-                        arContainer.innerHTML = "";
-                        debug.innerHTML += "<b>Cargando modelo 3D...</b><br>";
-                        const modelViewer = document.createElement('model-viewer');
-                        modelViewer.setAttribute('src', projectData.model_url);
-                        modelViewer.setAttribute('ar', '');
-                        modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
-                        modelViewer.setAttribute('camera-controls', '');
-                        modelViewer.setAttribute('enable-pan', '');
-                        modelViewer.setAttribute('autoplay', '');
-                        modelViewer.setAttribute('crossorigin', 'anonymous');
-                        modelViewer.style.width = "100vw";
-                        modelViewer.style.height = "100vh";
-                        arContainer.appendChild(modelViewer);
-                        showDebug(`<b>Modo:</b> Modelo 3D<br><b>URL Modelo:</b> ${projectData.model_url}`, true);
-
-                        // LOG: modelo 3d
-                        modelViewer.addEventListener('load', ()=>showDebug("<b>Modelo 3D cargado OK.</b>", true));
-                        modelViewer.addEventListener('error', ()=>showError("Error al cargar el modelo 3D"));
+                        initializeAframeVideo(projectData);
+                    } else { // 'model' es el default
+                        initializeModelViewer(projectData);
                     }
-                } catch(err) {
-                    showError("ERROR: " + err.message);
+                } catch (error) {
+                    showError(error.message);
                 }
-            })();
+            };
+
+            initialize();
         });
     </script>
 </body>
