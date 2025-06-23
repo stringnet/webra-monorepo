@@ -2,22 +2,29 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Visualizador AR - WebRA Fix</title>
+    <title>Visualizador AR PRO - Debug y Flujo UX</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Librerías -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-chromakey-material@^1.0.0/dist/aframe-chromakey-material.min.js"></script>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     <style>
         body {margin:0;overflow:hidden;}
         #playButton {
-            position: absolute; z-index: 10; left: 50%; top: 60%; transform: translate(-50%, -50%);
+            position: absolute; z-index: 10; left: 50%; top: 55%; transform: translate(-50%, -50%);
             padding: 20px 35px; font-size: 1.5rem; border: none; border-radius: 12px; background: #2e88f8;
-            color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1);
+            color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1); display: none;
         }
-        #debug {position:fixed;bottom:15px;left:15px;z-index:30;background:rgba(0,0,0,0.75);color:#fff;padding:10px 16px;border-radius:8px;font-size:1em;}
+        #videoPreview {
+            position: absolute; z-index: 9; left: 50%; top: 40%; transform: translate(-50%, -50%);
+            max-width: 90vw; max-height: 40vh; border-radius: 14px; box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+            background: #000;
+        }
+        #debug {position:fixed;bottom:15px;left:15px;z-index:30;background:rgba(0,0,0,0.85);color:#fff;padding:14px 20px 8px 18px;border-radius:8px;font-size:1em;max-width:60vw;}
         .overlay { position: absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 20; background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;}
         .hidden {display:none;}
+        model-viewer { width: 100vw; height: 100vh; }
     </style>
 </head>
 <body>
@@ -25,7 +32,8 @@
         <div style="margin-bottom:18px">Cargando proyecto...</div>
         <div class="spinner" style="border:5px solid #444;border-top:5px solid #fff;width:40px;height:40px;border-radius:50%;animation:spin 1s linear infinite"></div>
     </div>
-    <button id="playButton" style="display:none;">▶ Play Video</button>
+    <button id="playButton">▶ Iniciar Experiencia AR</button>
+    <video id="videoPreview" class="hidden" muted loop playsinline webkit-playsinline></video>
     <div id="ar-container"></div>
     <div id="debug" class="hidden"></div>
     <script>
@@ -45,16 +53,21 @@
             const arContainer = document.getElementById('ar-container');
             const playButton = document.getElementById('playButton');
             const debug = document.getElementById('debug');
+            const videoPreview = document.getElementById('videoPreview');
 
             const showError = msg => {
                 loader.innerHTML = `<div style="color:red;">${msg}</div>`;
                 loader.classList.remove('hidden');
+                debug.innerHTML += `<div style="color:red;"><b>ERROR:</b> ${msg}</div>`;
+                debug.classList.remove('hidden');
+                console.error(msg);
             };
 
-            function showDebug(info) {
-                debug.innerHTML = info;
+            function showDebug(info, important) {
+                debug.innerHTML += info + "<br>";
                 debug.classList.remove('hidden');
-                console.log('[DEBUG]', info.replace(/<br>/g, '\n'));
+                if (important) console.warn('[DEBUG]', info.replace(/<br>/g, '\n'));
+                else console.log('[DEBUG]', info.replace(/<br>/g, '\n'));
             }
 
             (async function(){
@@ -69,84 +82,100 @@
                     if (!response.ok) throw new Error(`Proyecto no encontrado (Error ${response.status})`);
                     const projectData = await response.json();
 
+                    debug.innerHTML = ""; // Limpiar logs previos
+                    showDebug(`<b>ProjectID:</b> ${projectId}`, true);
+
+                    // --- CARGA DINÁMICA DE VIDEO ---
                     if (projectData.asset_type === 'video') {
                         loader.classList.add('hidden');
-                        playButton.style.display = "block";
+                        // Setear src, color y logs previos
                         const chromaColor = projectData.chroma_key_color || '#00FF00';
-                        showDebug(
-                            `<b>URL Video:</b> ${projectData.model_url}<br>` +
-                            `<b>Chroma HEX:</b> ${chromaColor}<br>` +
-                            `<b>Chroma RGB 0-1:</b> ${hexToRGBString(chromaColor)}`
-                        );
+                        const chromaRGB = hexToRGBString(chromaColor);
 
+                        videoPreview.src = projectData.model_url;
+                        videoPreview.classList.remove('hidden');
+                        videoPreview.load();
+                        showDebug(`<b>URL Video:</b> ${projectData.model_url}<br>` +
+                            `<b>Chroma HEX:</b> ${chromaColor}<br>` +
+                            `<b>Chroma RGB 0-1:</b> ${chromaRGB}`, true);
+
+                        // LOGS de eventos del video
+                        ["loadstart", "loadedmetadata", "canplay", "canplaythrough", "playing", "pause", "ended", "error"].forEach(evt => {
+                            videoPreview.addEventListener(evt, () => {
+                                showDebug(`<b>Video event:</b> ${evt}, readyState: ${videoPreview.readyState}, network: ${videoPreview.networkState}`);
+                            });
+                        });
+                        videoPreview.onerror = (e) => showError("Error al cargar el video (revisa CORS o formato)");
+
+                        // Cuando puede reproducirse, muestra botón y logs
+                        videoPreview.oncanplaythrough = () => {
+                            showDebug(`<span style="color:lime"><b>Video listo para reproducir</b></span>`, true);
+                            playButton.style.display = "block";
+                            videoPreview.play().catch(()=>{});
+                        };
+
+                        // Si hay error, mostrarlo
+                        videoPreview.onstalled = () => showError("Video stalled, revisa el servidor o el formato.");
+                        videoPreview.onabort = () => showError("La carga de video fue abortada.");
+
+                        // Cuando dan play, inicia la experiencia AR
                         playButton.onclick = function() {
                             playButton.style.display = "none";
+                            videoPreview.classList.add('hidden');
                             loader.classList.remove('hidden');
+                            loader.innerHTML = "<div>Iniciando AR y solicitando permisos de cámara...</div>";
                             arContainer.innerHTML = "";
+                            debug.innerHTML += `<hr><b>Iniciando escena AR...</b><br>`;
 
-                            // 1. Creamos video HTML (fuera de A-Frame) y esperamos readyState==4
-                            const testVideo = document.createElement('video');
-                            testVideo.src = projectData.model_url;
-                            testVideo.crossOrigin = "anonymous";
-                            testVideo.setAttribute('playsinline', '');
-                            testVideo.setAttribute('webkit-playsinline', '');
-                            testVideo.preload = 'auto';
-                            testVideo.muted = true;
-                            testVideo.loop = true;
+                            // Creamos la escena y solo cuando video ya estaba OK
+                            const scene = document.createElement('a-scene');
+                            scene.setAttribute('embedded', '');
+                            scene.setAttribute('vr-mode-ui', 'enabled: false');
+                            scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
+                            scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
 
-                            testVideo.addEventListener('canplaythrough', function onCanPlay() {
-                                showDebug(
-                                    `<b>URL Video:</b> ${testVideo.src}<br>` +
-                                    `<b>Chroma HEX:</b> ${chromaColor}<br>` +
-                                    `<b>Chroma RGB 0-1:</b> ${hexToRGBString(chromaColor)}<br>` +
-                                    `<b>Video readyState:</b> ${testVideo.readyState}`
-                                );
-                                testVideo.removeEventListener('canplaythrough', onCanPlay);
+                            // Assets: el mismo objeto video
+                            const assets = document.createElement('a-assets');
+                            videoPreview.setAttribute('id', 'videoChroma');
+                            videoPreview.muted = false; // Ahora sí habilita audio si corresponde
+                            assets.appendChild(videoPreview);
+                            scene.appendChild(assets);
 
-                                // 2. Ahora sí, insertamos la escena con el asset cargado
+                            // Marker AR
+                            const marker = document.createElement('a-marker');
+                            if(projectData.marker_type === 'image' && projectData.marker_url) {
+                                marker.setAttribute('type', 'pattern');
+                                marker.setAttribute('url', projectData.marker_url);
+                            } else {
+                                marker.setAttribute('preset', 'hiro'); 
+                            }
+                            marker.setAttribute('emitevents', 'true');
+                            // Plano con shader chroma
+                            const plane = document.createElement('a-plane');
+                            plane.setAttribute('width', '1.6');
+                            plane.setAttribute('height', '0.9');
+                            plane.setAttribute('rotation', '-90 0 0');
+                            plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
+                            marker.appendChild(plane);
+                            scene.appendChild(marker);
+                            scene.appendChild(document.createElement('a-camera'));
+                            arContainer.appendChild(scene);
+
+                            setTimeout(() => {
+                                videoPreview.play().then(()=>{
+                                    showDebug("<b>Video play() ejecutado en modo AR.</b>", true);
+                                }).catch(e=>{
+                                    showDebug("<b>ERROR play():</b> " + e, true);
+                                });
                                 loader.classList.add('hidden');
-                                const scene = document.createElement('a-scene');
-                                scene.setAttribute('embedded', '');
-                                scene.setAttribute('vr-mode-ui', 'enabled: false');
-                                scene.setAttribute('arjs', 'sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;');
-                                scene.setAttribute('renderer', 'logarithmicDepthBuffer: true;');
-
-                                // Assets: el video
-                                const assets = document.createElement('a-assets');
-                                // Usar el mismo objeto video para asegurar buffer
-                                testVideo.id = 'videoChroma';
-                                assets.appendChild(testVideo);
-                                scene.appendChild(assets);
-
-                                const marker = document.createElement('a-marker');
-                                if(projectData.marker_type === 'image' && projectData.marker_url) {
-                                    marker.setAttribute('type', 'pattern');
-                                    marker.setAttribute('url', projectData.marker_url);
-                                } else {
-                                    marker.setAttribute('preset', 'hiro'); 
-                                }
-                                marker.setAttribute('emitevents', 'true');
-                                const chromaRGB = hexToRGBString(chromaColor);
-                                const plane = document.createElement('a-plane');
-                                plane.setAttribute('width', '1.6');
-                                plane.setAttribute('height', '0.9');
-                                plane.setAttribute('rotation', '-90 0 0');
-                                plane.setAttribute('chromakey-material', `src: #videoChroma; color: ${chromaRGB};`);
-                                marker.appendChild(plane);
-                                scene.appendChild(marker);
-                                scene.appendChild(document.createElement('a-camera'));
-                                arContainer.appendChild(scene);
-
-                                // Play seguro:
-                                setTimeout(() => {
-                                    testVideo.play().catch(() => {});
-                                }, 250);
-                            });
-                            testVideo.load();
+                            }, 250);
                         };
+
+                    // --- CARGA DE MODELO 3D ---
                     } else {
                         loader.classList.add('hidden');
                         arContainer.innerHTML = "";
+                        debug.innerHTML += "<b>Cargando modelo 3D...</b><br>";
                         const modelViewer = document.createElement('model-viewer');
                         modelViewer.setAttribute('src', projectData.model_url);
                         modelViewer.setAttribute('ar', '');
@@ -158,7 +187,11 @@
                         modelViewer.style.width = "100vw";
                         modelViewer.style.height = "100vh";
                         arContainer.appendChild(modelViewer);
-                        showDebug(`<b>Modo:</b> Modelo 3D<br><b>URL Modelo:</b> ${projectData.model_url}`);
+                        showDebug(`<b>Modo:</b> Modelo 3D<br><b>URL Modelo:</b> ${projectData.model_url}`, true);
+
+                        // LOG: modelo 3d
+                        modelViewer.addEventListener('load', ()=>showDebug("<b>Modelo 3D cargado OK.</b>", true));
+                        modelViewer.addEventListener('error', ()=>showError("Error al cargar el modelo 3D"));
                     }
                 } catch(err) {
                     showError("ERROR: " + err.message);
