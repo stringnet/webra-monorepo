@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Visualizador AR PRO - Debug y Flujo UX</title>
+    <title>Visualizador AR PRO UX</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Librerías -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -12,14 +12,14 @@
     <style>
         body {margin:0;overflow:hidden;}
         #playButton {
-            position: absolute; z-index: 10; left: 50%; top: 55%; transform: translate(-50%, -50%);
+            position: absolute; z-index: 10; left: 50%; top: 65%; transform: translate(-50%, -50%);
             padding: 20px 35px; font-size: 1.5rem; border: none; border-radius: 12px; background: #2e88f8;
             color: #fff; cursor: pointer; box-shadow: 0 4px 30px rgba(0,0,0,0.1); display: none;
         }
         #videoPreview {
-            position: absolute; z-index: 9; left: 50%; top: 40%; transform: translate(-50%, -50%);
-            max-width: 90vw; max-height: 40vh; border-radius: 14px; box-shadow: 0 4px 30px rgba(0,0,0,0.3);
-            background: #000;
+            position: absolute; z-index: 9; left: 50%; top: 45%; transform: translate(-50%, -50%);
+            max-width: 90vw; max-height: 45vh; border-radius: 14px; box-shadow: 0 4px 30px rgba(0,0,0,0.3); background: #000;
+            display: none;
         }
         #debug {position:fixed;bottom:15px;left:15px;z-index:30;background:rgba(0,0,0,0.85);color:#fff;padding:14px 20px 8px 18px;border-radius:8px;font-size:1em;max-width:60vw;}
         .overlay { position: absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index: 20; background:rgba(0,0,0,0.75); color:white; font-size:1.2rem;}
@@ -33,7 +33,7 @@
         <div class="spinner" style="border:5px solid #444;border-top:5px solid #fff;width:40px;height:40px;border-radius:50%;animation:spin 1s linear infinite"></div>
     </div>
     <button id="playButton">▶ Iniciar Experiencia AR</button>
-    <video id="videoPreview" class="hidden" muted loop playsinline webkit-playsinline></video>
+    <video id="videoPreview" muted loop playsinline webkit-playsinline></video>
     <div id="ar-container"></div>
     <div id="debug" class="hidden"></div>
     <script>
@@ -87,14 +87,18 @@
 
                     // --- CARGA DINÁMICA DE VIDEO ---
                     if (projectData.asset_type === 'video') {
-                        loader.classList.add('hidden');
+                        // Comienza mostrando solo el loader
+                        loader.classList.remove('hidden');
+                        playButton.style.display = "none";
+                        videoPreview.style.display = "none";
+
                         // Setear src, color y logs previos
                         const chromaColor = projectData.chroma_key_color || '#00FF00';
                         const chromaRGB = hexToRGBString(chromaColor);
 
                         videoPreview.src = projectData.model_url;
-                        videoPreview.classList.remove('hidden');
                         videoPreview.load();
+
                         showDebug(`<b>URL Video:</b> ${projectData.model_url}<br>` +
                             `<b>Chroma HEX:</b> ${chromaColor}<br>` +
                             `<b>Chroma RGB 0-1:</b> ${chromaRGB}`, true);
@@ -107,9 +111,11 @@
                         });
                         videoPreview.onerror = (e) => showError("Error al cargar el video (revisa CORS o formato)");
 
-                        // Cuando puede reproducirse, muestra botón y logs
+                        // Cuando puede reproducirse, muestra preview y botón y oculta loader
                         videoPreview.oncanplaythrough = () => {
                             showDebug(`<span style="color:lime"><b>Video listo para reproducir</b></span>`, true);
+                            loader.classList.add('hidden');
+                            videoPreview.style.display = "block";
                             playButton.style.display = "block";
                             videoPreview.play().catch(()=>{});
                         };
@@ -121,9 +127,9 @@
                         // Cuando dan play, inicia la experiencia AR
                         playButton.onclick = function() {
                             playButton.style.display = "none";
-                            videoPreview.classList.add('hidden');
+                            videoPreview.style.display = "none";
+                            loader.innerHTML = "<div>Iniciando AR y solicitando permisos de cámara...</div><div class='spinner' style='margin-top:20px;border:5px solid #444;border-top:5px solid #fff;width:40px;height:40px;border-radius:50%;animation:spin 1s linear infinite'></div>";
                             loader.classList.remove('hidden');
-                            loader.innerHTML = "<div>Iniciando AR y solicitando permisos de cámara...</div>";
                             arContainer.innerHTML = "";
                             debug.innerHTML += `<hr><b>Iniciando escena AR...</b><br>`;
 
